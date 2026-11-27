@@ -12,6 +12,7 @@ import { state, actions } from '../stores';
 import { api } from '../lib/api';
 import { resetDiscoveryFeed } from '../lib/discoveryFeedStore';
 import { t } from '../lib/i18n';
+import { copyText } from '../lib/clipboard';
 import { linkReading, refreshLinkReading } from '../lib/linkQuality';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
@@ -451,6 +452,7 @@ function DownloadsSection() {
 
 function DevicesSection() {
   const sharedLinks = associationUrl();
+  const tvUrl = () => (typeof window !== 'undefined' ? `${window.location.origin}/tv/` : '/tv/');
   return (
     <>
       <SettingsGroup label={t('settings.group.thisDevice')}>
@@ -470,6 +472,25 @@ function DevicesSection() {
             onClick={() => window.location.assign(sharedLinks!)}
           />
         </Show>
+      </SettingsGroup>
+
+      <SettingsGroup label={t('settings.group.tv')}>
+        <ActionRow
+          anchor="tv-url"
+          label={t('settings.tvUrl')}
+          hint={t('settings.tvUrlHint', { url: tvUrl() })}
+          onClick={() =>
+            void copyText(tvUrl()).then((copied) => {
+              if (copied) toast.success(t('social.copied'));
+            })
+          }
+        />
+        <NavRow
+          anchor="tv-approve"
+          href="/tv-approve"
+          label={t('settings.tvApprove')}
+          hint={t('settings.tvApproveHint')}
+        />
       </SettingsGroup>
 
       <SettingsGroup anchor="paired-devices" label={t('settings.pairedDevices')} note={t('settings.pairNote')}>

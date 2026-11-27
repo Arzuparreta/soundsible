@@ -113,7 +113,9 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
     return {
       phase: livePhase(override),
       duration,
-      volume: { level: pb.volume, muted: pb.muted },
+      ...(state.device.commands.includes('transport.set_volume')
+        ? { volume: { level: pb.volume, muted: pb.muted } }
+        : {}),
       dj,
     };
   }

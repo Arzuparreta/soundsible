@@ -64,6 +64,7 @@ export interface RemoteCommandPorts {
   lastRev: () => number | null;
   sessionFor: (remote: RemotePlaybackState) => PlaybackSessionSnapshot | null;
   playRestoredSession: (session: PlaybackSessionSnapshot, position: number) => boolean;
+  allowedCommands?: () => readonly string[];
 }
 
 type CommandHandler = (args: Record<string, unknown>) => Promise<DeviceCommandAck>;
@@ -481,6 +482,10 @@ export function createRemoteCommandExecutor(ports: RemoteCommandPorts, lifetime:
   async function execute(payload: DeviceCommandRequest | null | undefined): Promise<DeviceCommandAck> {
     const name = payload?.name;
     if (typeof name !== 'string' || !Object.prototype.hasOwnProperty.call(handlers, name)) {
+      return reject('unsupported');
+    }
+    const allowed = ports.allowedCommands?.();
+    if (allowed && !allowed.includes(name)) {
       return reject('unsupported');
     }
     const rawArgs = payload?.args;

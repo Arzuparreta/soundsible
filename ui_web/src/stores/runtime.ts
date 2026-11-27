@@ -1,9 +1,9 @@
 import { installAppearanceAutomation } from '../lib/colorPreferences';
-import { preferenceActions } from './preferences';
+import { preferenceActions, setDeviceNameChangeListener } from './preferences';
 import { isAppleMobile } from '../lib/audio/appleMobile';
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { syncSavedEntities } from "../lib/savedEntities";
-import { user } from "../lib/session";
+import { refreshSession, user } from "../lib/session";
 import { createSocket, type AppSocket, type DeviceCommandAck, type DeviceCommandRequest } from "../lib/socket";
 import { dispatchDiscoveryFeedReady, type DiscoveryFeedReadyEvent } from "../lib/discoveryEvents";
 import { api } from "../lib/api";
@@ -95,6 +95,13 @@ export interface RuntimePorts {
 }
 
 /** Owns runtime behaviour; cross-domain work enters through explicit ports. */
+export interface StoreInitOptions {
+  /** Install global desktop/player keyboard shortcuts (disabled on D-pad TV surfaces). */
+  desktopShortcuts?: boolean;
+  /** Optional explicit remote command allow-list applied to `state.device.commands`. */
+  remoteCommands?: readonly string[];
+}
+
 export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
   let socket: AppSocket | null = null;
   function displayMode(): string {
@@ -121,8 +128,11 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       capture: true
     });
   }
-  function initStore(): void {
+  function initStore(options?: StoreInitOptions): void {
     if (socket) return;
+    if (options?.remoteCommands) {
+      setState('device', 'commands', [...options.remoteCommands]);
+    }
     lifetime.start();
     const diagnosticUser = user()?.id;
     if (diagnosticUser) lifetime.own(startAutomaticPlaybackDiagnostics({
@@ -377,18 +387,28 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       // Coming back from a freeze. The store's clock stopped where the page did,
       // so anything derived from it — the scrubber, the OS position, the DJ
       // runway — has been reading a position the music left behind long ago.
+      const wasPlaying = state.playback.isPlaying;
       const snapshot = audioService.snapshot();
       const position = snapshot.position;
       const drift = Math.abs(position - (state.playback.currentTime || 0));
       if (state.playback.currentTrack) {
+        const nextPhase = snapshot.playing
+          ? 'playing'
+          : state.playback.phase === 'playing' || state.playback.phase === 'buffering'
+            ? 'paused'
+            : state.playback.phase;
         setState('playback', {
           currentTime: position,
           duration: snapshot.duration > 0 ? snapshot.duration : state.playback.duration,
-          isPlaying: snapshot.playing
+          isPlaying: snapshot.playing,
+          phase: nextPhase,
         });
         // The element is the authority after a spell asleep, and the OS card may
         // have been reading a state nobody corrected while the page was frozen.
         ports.updateMediaSession(state.playback.currentTrack, 'visibility_resume', true);
+        if (wasPlaying !== snapshot.playing || drift > 1) {
+          void ports.pushPlaybackState();
+        }
         if (hiddenSince !== null && drift > 1) {
           ports.emitPlaybackEvent('ui_visibility_resume', {
             hidden_sec: Math.round((Date.now() - hiddenSince) / 1000),
@@ -445,15 +465,37 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       ports.programMediaSession.setReporter(null);
       ports.programMediaSession.uninstallActions();
     });
+    let socketConnected = false;
+    const emitDeviceRegistration = (force = false): void => {
+      if (!socket) return;
+      if (!force && !socket.connected && !socketConnected) return;
+      const registration = { ...state.device, commands: [...state.device.commands] };
+      socket.emit('playback_register', registration);
+      void api.registerDevice(registration).catch(lifetime.guard(() => {}));
+    };
+    let renameTimer: ReturnType<typeof setTimeout> | null = null;
+    setDeviceNameChangeListener(() => {
+      if (renameTimer) clearTimeout(renameTimer);
+      renameTimer = setTimeout(() => {
+        renameTimer = null;
+        emitDeviceRegistration();
+      }, 100);
+    });
+    lifetime.own(() => {
+      if (renameTimer) {
+        clearTimeout(renameTimer);
+        renameTimer = null;
+      }
+      setDeviceNameChangeListener(null);
+    });
     socket.on('connect', lifetime.guard(() => {
+      socketConnected = true;
       recordPlaybackDiagnostic('connection.state', { state: 'online' });
       void syncSavedEntities();
       ports.revalidatePreparation();
       setState('online', true);
       if (state.libraryError) void ports.actions.syncLibrary();
-      const registration = { ...state.device, commands: [...state.device.commands] };
-      socket!.emit('playback_register', registration);
-      void api.registerDevice(registration).catch(lifetime.guard(() => {}));
+      emitDeviceRegistration(true);
       remoteStore()?.onRemoteConnect();
       void ports.actions.loadDownloads(); // re-seed the queue after a (re)connect
       // The station is reachable again: if the music ran out while it was not,
@@ -461,13 +503,17 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       ports.resumeFromStarved();
     }));
     socket.on('disconnect', lifetime.guard((reason?: string) => {
+      socketConnected = false;
       recordPlaybackDiagnostic('connection.state', { state: 'offline', reason: 'socket_disconnected' });
       setState('online', false);
-      // The station drops a socket whose credential lapsed — including the one
-      // a password change just replaced — and Socket.IO never retries a
-      // server-side disconnect on its own. One attempt with the current cookie:
-      // a credential that really is gone is refused, not looped on.
-      if (reason === 'io server disconnect') reconnect();
+      // The station drops a socket whose credential lapsed — including a
+      // revoked TV/session credential — and Socket.IO never retries a
+      // server-side disconnect on its own. Reconnect once synchronously and
+      // refresh auth so a revoked session returns to sign-in.
+      if (reason === 'io server disconnect') {
+        reconnect();
+        void refreshSession().catch(() => {});
+      }
     }));
     // A sweep measured more of the library. Nothing re-levels mid-song; the new
     // numbers ride the refreshed library and apply from the next track on.
@@ -554,8 +600,9 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
 
     // Global keyboard shortcuts (desktop). The decision table lives in
     // lib/shortcuts so it can be tested without a DOM; the store only supplies
-    // the context snapshot and the callbacks.
-    if (typeof window !== 'undefined') {
+    // the context snapshot and the callbacks. Disabled on D-pad TV surfaces so
+    // arrow/Enter keys stay owned by spatial remote navigation.
+    if (typeof window !== 'undefined' && options?.desktopShortcuts !== false) {
       // While another device is controlled the shortcuts act on it, as every player control does.
       const shown = () => {
         const m = remoteStore();

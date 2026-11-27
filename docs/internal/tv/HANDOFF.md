@@ -41,12 +41,12 @@ For the preferred TV-displays-code journey, implement a distinct device authoriz
 
 ## Implementation order and review gates
 
-| Slice | Deliverable | Evidence required before moving on |
-| --- | --- | --- |
-| Hardware probe | Minimal station-served page on the intended LG. Open by URL with the actual remote. Capture model, firmware, viewport, received input events, first user-initiated audio, suspend and return. | A listener reaches audible playback using the remote. If the browser consumes essential navigation or cannot stream a supported track, test the hosted launcher before building screens. |
-| Entry and identity | Build/serve the second entry, select account, implement sign-in and teardown. Keep host-specific behavior at the shell boundary. | Route, cache, stale/missing dist, cross-account isolation and authorization tests. Restart the browser and verify the session and sign-out. |
-| Core listening | Ship Home, Library, Search, collection detail, Now Playing, Queue and dim view. Add remote receiver capability declarations and lifecycle recovery. | From cold start play a track, browse without interruption, change track from a phone, disconnect the phone and pause on the TV. Reconnect a dropped socket and verify one command produces one action. |
-| Qualification | Browser fixtures plus a physical LG run. Record separate results for browser and installed launcher if applicable. | Publish only the tested model/mode combinations. Add user setup instructions once paths and supported behavior are verified. |
+| Slice | Deliverable | Evidence required before moving on | Status |
+| --- | --- | --- | --- |
+| Hardware probe | Minimal station-served page on the intended LG. Open by URL with the actual remote. Capture model, firmware, viewport, received input events, first user-initiated audio, suspend and return. | A listener reaches audible playback using the remote. If the browser consumes essential navigation or cannot stream a supported track, test the hosted launcher before building screens. | Open — awaiting physical LG hardware test |
+| Entry and identity | Build/serve the second entry, select account, implement sign-in and teardown. Keep host-specific behavior at the shell boundary. | Route, cache, stale/missing dist, cross-account isolation and authorization tests. Restart the browser and verify the session and sign-out. | Implemented & covered by backend/unit/browser checks (physical TV pending) |
+| Core listening | Ship Home, Library, Search, collection detail, Now Playing, Queue and dim view. Add remote receiver capability declarations and lifecycle recovery. | From cold start play a track, browse without interruption, change track from a phone, disconnect the phone and pause on the TV. Reconnect a dropped socket and verify one command produces one action. | Implemented & covered by backend/unit/browser checks (physical TV pending) |
+| Qualification | Browser fixtures plus a physical LG run. Record separate results for browser and installed launcher if applicable. | Publish only the tested model/mode combinations. Add user setup instructions once paths and supported behavior are verified. | Open — physical LG run & firmware qualification not yet performed |
 
 For the implementation PR, run API and store tests, the full web unit suite and all four existing Playwright profiles, followed by a TV viewport suite covering key sequences, long lists, dialogs, restore after Back, pointer handoff and repeated keys. Test the production entry served by Flask as well as the Vite test fixture. Check boot payload against the existing desktop budget. Attach a short PR recording of the first-play journey and focus restoration.
 

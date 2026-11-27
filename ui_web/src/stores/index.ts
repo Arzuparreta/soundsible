@@ -1,4 +1,4 @@
-import { resetAccountState } from './core';
+import { resetAccountState, state } from './core';
 import { invalidateLibrarySync } from './library';
 import { clearDownloadTimers } from './downloads';
 import { resetSavedEntities } from '../lib/savedEntities';
@@ -11,7 +11,7 @@ import { createQueue } from './queue';
 import { createSession } from './session';
 import { createPodcasts } from './podcasts';
 import { createPlaylists } from './playlists';
-import { createRuntime } from './runtime';
+import { createRuntime, type StoreInitOptions } from './runtime';
 import { createCollection } from './collection';
 import { createDownloadActions } from './downloadActions';
 import { preferenceActions } from './preferences';
@@ -439,6 +439,7 @@ function createClient() {
       return actions;
     }
   }, lifetime);
+  let allowedRemoteCommands: readonly string[] | undefined;
   let remoteExecutor: Promise<ReturnType<(typeof import('./remoteCommands'))['createRemoteCommandExecutor']>> | null = null;
   async function handleDeviceCommand(
     payload: import('../lib/socket').DeviceCommandRequest,
@@ -457,6 +458,7 @@ function createClient() {
           lastRev: session.lastRev,
           sessionFor: session.sessionFor,
           playRestoredSession: session.playRestoredSession,
+          allowedCommands: () => allowedRemoteCommands ?? state.device.commands,
         }, lifetime),
       );
       const executor = await remoteExecutor;
@@ -643,7 +645,10 @@ function createClient() {
   };
   return {
     actions,
-    initStore: runtime.initStore,
+    initStore(options?: StoreInitOptions) {
+      allowedRemoteCommands = options?.remoteCommands;
+      runtime.initStore(options);
+    },
     dispose() {
       lifetime.close();
       transport.dispose();
@@ -661,13 +666,13 @@ function createClient() {
 let client = createClient();
 let disposed = false;
 export let actions: PlayerActions = client.actions;
-export function initStore(): void {
+export function initStore(options?: StoreInitOptions): void {
   if (disposed) {
     client = createClient();
     actions = client.actions;
     disposed = false;
   }
-  client.initStore();
+  client.initStore(options);
 }
 export function disposeStore(): void {
   if (disposed) return;

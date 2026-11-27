@@ -644,4 +644,65 @@ describe('registration, seq, live state and debounced session publishing', () =>
 
     h.store.disposeStore();
   });
+
+  it('rejects excluded DJ, radio, and volume commands and omits live.volume in TV mode', async () => {
+    vi.useFakeTimers();
+    const { TV_REMOTE_COMMANDS } = await import('../lib/deviceIdentity');
+    const h = await loadStoreHarness();
+    h.store.initStore({
+      desktopShortcuts: false,
+      remoteCommands: TV_REMOTE_COMMANDS,
+    });
+    h.store.actions.playFrom([t1, t2], 0);
+    h.fireDeck('playing');
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(h.api.putPlaybackState).toHaveBeenCalled();
+    const published = h.api.putPlaybackState.mock.calls.at(-1)![0];
+    expect(published.live.volume).toBeUndefined();
+
+    // Volume / radio / DJ commands are rejected as unsupported on TV receivers.
+    const sendCmd = async (name: string, args: Record<string, unknown>) => {
+      const ack = vi.fn();
+      h.fireSocket('device_command', { name, args }, ack);
+      await vi.waitFor(() => expect(ack).toHaveBeenCalled());
+      return ack.mock.calls[0][0];
+    };
+    const ackVol = await sendCmd('transport.set_volume', { level: 0.4 });
+    const ackRadio = await sendCmd('radio.start', { track: t1 });
+    const ackDj = await sendCmd('dj.start_from_current', {});
+    expect(ackVol).toEqual({ status: 'rejected', reason: 'unsupported' });
+    expect(ackRadio).toEqual({ status: 'rejected', reason: 'unsupported' });
+    expect(ackDj).toEqual({ status: 'rejected', reason: 'unsupported' });
+
+    // Supported playback command still executes cleanly.
+    const ackNext = await sendCmd('transport.next', {});
+    expect(ackNext.status).toBe('applied');
+
+    h.store.disposeStore();
+  });
+
+  it('skips desktop shortcut handler when desktopShortcuts is false and re-emits registration on rename', async () => {
+    vi.useFakeTimers();
+    const h = await loadStoreHarness();
+    h.store.initStore({ desktopShortcuts: false });
+    h.fireSocket('connect');
+    h.store.actions.playFrom([t1, t2], 0);
+    h.fireDeck('playing');
+    await vi.advanceTimersByTimeAsync(250);
+
+    const beforePaused = h.store.state.playback.isPlaying;
+    // Desktop Space shortcut should not toggle playback when desktopShortcuts is false.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    expect(h.store.state.playback.isPlaying).toBe(beforePaused);
+
+    h.api.registerDevice.mockClear();
+    h.store.actions.setDeviceName('Media Room TV');
+    await vi.advanceTimersByTimeAsync(150);
+    expect(h.api.registerDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ device_name: 'Media Room TV' }),
+    );
+
+    h.store.disposeStore();
+  });
 });

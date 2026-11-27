@@ -23,7 +23,7 @@ function playbackSourceRevision() {
   };
   visit(resolve(root, 'src'));
   visit(resolve(root, 'public'));
-  for (const name of ['index.html', 'package.json', '../branding/logo-mark.svg']) {
+  for (const name of ['index.html', 'tv.html', 'package.json', '../branding/logo-mark.svg']) {
     hash.update(readFileSync(resolve(root, name)));
   }
   hash.update(readFileSync(resolve(root, 'package-lock.json')));
@@ -31,10 +31,38 @@ function playbackSourceRevision() {
   return hash.digest('hex');
 }
 
+function tvRoutes() {
+  const rewriteTvRequest = (middlewares) => {
+    middlewares.use((req, res, next) => {
+      const rawUrl = req.url || '/';
+      const parsed = new URL(rawUrl, 'http://127.0.0.1');
+      if (parsed.pathname === '/tv') {
+        res.statusCode = 308;
+        res.setHeader('Location', `/tv/${parsed.search}`);
+        res.end();
+        return;
+      }
+      if (parsed.pathname === '/tv/') {
+        req.url = `/player/tv.html${parsed.search}`;
+      }
+      next();
+    });
+  };
+  return {
+    name: 'soundsible-tv-routes',
+    configureServer(server) {
+      rewriteTvRequest(server.middlewares);
+    },
+    configurePreviewServer(server) {
+      rewriteTvRequest(server.middlewares);
+    },
+  };
+}
+
 /**
- * Single SolidJS player for every surface. In production Flask serves the
- * generated dist/index.html from /player/ and /player/desktop/.
- * Dev: `npm run dev` proxies /api and Socket.IO to the Flask server.
+ * Dual-entry SolidJS player: /player/ (index.html) and /tv/ (tv.html).
+ * In production Flask serves the generated dist/ files; in dev Vite proxies
+ * /api and /socket.io to the Flask server.
  */
 // Where `npm run dev` and `npm run preview` proxy the engine. The browser tests
 // point it at a closed port (playwright.config.ts).
@@ -47,7 +75,7 @@ export default defineConfig(({ command }) => ({
   // Copied verbatim to dist/ (stable names, no hashing) so the manifest and its
   // icons keep predictable URLs — a .webmanifest can't reference hashed assets.
   publicDir: resolve(root, 'public'),
-  plugins: [solid(), startupScreen(), ...(command === 'build' ? [payloadAssets(playbackSourceRevision())] : [])],
+  plugins: [tvRoutes(), solid(), startupScreen(), ...(command === 'build' ? [payloadAssets(playbackSourceRevision())] : [])],
   resolve: {
     alias: {
       '@': resolve(root, 'src'),
@@ -58,7 +86,10 @@ export default defineConfig(({ command }) => ({
     emptyOutDir: true,
     manifest: true,
     rollupOptions: {
-      input: resolve(root, 'index.html'),
+      input: {
+        index: resolve(root, 'index.html'),
+        tv: resolve(root, 'tv.html'),
+      },
       output: {
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',

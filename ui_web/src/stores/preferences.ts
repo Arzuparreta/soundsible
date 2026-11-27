@@ -5,10 +5,18 @@ import { persistTheme, type CustomColors } from "../lib/colorPreferences";
 import { announceTheme, applyTheme } from "./theme";
 
 /** Local preferences need neither a runtime owner nor cross-domain ports. */
+let deviceNameChangeListener: (() => void) | null = null;
+
+/** Subscribe to runtime device rename updates so active sessions re-register. */
+export function setDeviceNameChangeListener(listener: (() => void) | null): void {
+  deviceNameChangeListener = listener;
+}
+
 export const preferenceActions = {
   setDeviceName(name: string): void {
     setState('device', 'device_name', name);
     localStorage.setItem('device_name', name);
+    deviceNameChangeListener?.();
   },
   setTheme(theme: Theme, colors: CustomColors = state.customColors, persist = true): void {
     if (!isTheme(theme)) return;

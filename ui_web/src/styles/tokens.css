@@ -857,3 +857,76 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Smart TV 10-foot tokens (1920x1080 baseline, Chromium 108 safe) ── */
+:root[data-surface='tv'] {
+  color-scheme: dark;
+  --tv-u: clamp(0.6667px, min(calc(100vw / 1920), calc(100vh / 1080)), 1.5px);
+
+  --tv-font-hero: calc(56 * var(--tv-u));
+  --tv-font-title: calc(44 * var(--tv-u));
+  --tv-font-heading: calc(36 * var(--tv-u));
+  --tv-font-body: calc(32 * var(--tv-u));
+  --tv-font-sub: calc(26 * var(--tv-u));
+  --tv-font-caption: calc(22 * var(--tv-u));
+
+  --tv-control-min-h: calc(64 * var(--tv-u));
+  --tv-safe-x: 5vw;
+  --tv-safe-y: 5vh;
+
+  --tv-gap-xs: calc(12 * var(--tv-u));
+  --tv-gap-sm: calc(20 * var(--tv-u));
+  --tv-gap-md: calc(28 * var(--tv-u));
+  --tv-gap-lg: calc(40 * var(--tv-u));
+  --tv-gap-xl: calc(56 * var(--tv-u));
+
+  --tv-radius-sm: calc(12 * var(--tv-u));
+  --tv-radius-md: calc(18 * var(--tv-u));
+  --tv-radius-lg: calc(26 * var(--tv-u));
+  --tv-radius-pill: 999px;
+
+  --tv-rail-w: calc(280 * var(--tv-u));
+  --tv-rail-collapsed-w: calc(108 * var(--tv-u));
+  --tv-card-w: calc(280 * var(--tv-u));
+  --tv-card-art: calc(244 * var(--tv-u));
+  --tv-hero-art: calc(220 * var(--tv-u));
+  --tv-row-h: calc(88 * var(--tv-u));
+  --tv-row-art: calc(64 * var(--tv-u));
+  --tv-now-art: calc(380 * var(--tv-u));
+  --tv-qr-size: calc(280 * var(--tv-u));
+  --tv-seek-h: calc(20 * var(--tv-u));
+  --tv-max-form-w: calc(920 * var(--tv-u));
+  --tv-modal-w: calc(880 * var(--tv-u));
+
+  --tv-bg: #0b0c10;
+  --tv-surface: #151720;
+  --tv-surface-raised: #1e212d;
+  --tv-surface-focus: #2a2f40;
+  --tv-surface-selected: #232838;
+  --tv-surface-playing: rgba(249, 122, 18, 0.16);
+  --tv-scrim: rgba(7, 8, 12, 0.88);
+  --tv-dim-bg: #040406;
+
+  --tv-ink: #f6f7fa;
+  --tv-ink-muted: #b8bcc9;
+  --tv-ink-subtle: #8b90a0;
+  --tv-accent: #f97a12;
+  --tv-accent-ink: #ff9c47;
+  --tv-on-accent: #170c02;
+  --tv-danger: #ff5b52;
+  --tv-success: #38d162;
+  --tv-border: rgba(255, 255, 255, 0.14);
+  --tv-border-strong: rgba(255, 255, 255, 0.34);
+
+  /* Dual high-contrast outline + dark halo remains crisp over white or black art. */
+  --tv-focus-border: #ffffff;
+  --tv-focus-ring-shadow: 0 0 0 calc(4 * var(--tv-u)) #ffffff, 0 0 0 calc(8 * var(--tv-u)) rgba(8, 9, 12, 0.94), 0 calc(16 * var(--tv-u)) calc(36 * var(--tv-u)) rgba(0, 0, 0, 0.72);
+  --tv-card-shadow: 0 calc(12 * var(--tv-u)) calc(28 * var(--tv-u)) rgba(0, 0, 0, 0.5);
+  --tv-dur-focus: 140ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-surface='tv'] {
+    --tv-dur-focus: 0ms;
+  }
+}

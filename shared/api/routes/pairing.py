@@ -244,12 +244,13 @@ def create_pairing_session():
 
 
 def _pairing_session_ids(user_id) -> set[str]:
-    """Sign-in sessions minted by scanning this account's pairing code."""
-    return {
+    """Sign-in sessions minted by scanning this account's pairing or TV code."""
+    pairing_ids = {
         record["auth_token_id"]
         for record in _db().list_pairing_sessions(user_id=user_id)
         if record.get("status") == "completed" and record.get("auth_token_id")
     }
+    return pairing_ids | _db().list_tv_auth_session_ids(user_id)
 
 
 def _claim_signed_in_session(session: dict, *, device_name: str, device_type: str):
@@ -430,6 +431,12 @@ def revoke_paired_device(token_id: str):
     if record.get("revoked_at") is None:
         _db().revoke_auth_token(token_id)
         record = _db().get_auth_token(token_id) or record
+        try:
+            from shared.api import recheck_sockets
+
+            recheck_sockets()
+        except Exception:
+            pass
     return jsonify(_paired_device_response(record)), 200
 
 

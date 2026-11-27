@@ -12,7 +12,13 @@
 
 import { createSignal } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
-import { detectDeviceName, detectFormFactor, WEB_REMOTE_COMMANDS } from '../lib/deviceIdentity';
+import {
+  detectDeviceName,
+  detectFormFactor,
+  isTvShell,
+  TV_REMOTE_COMMANDS,
+  WEB_REMOTE_COMMANDS,
+} from '../lib/deviceIdentity';
 import { randomId } from '../lib/randomId';
 
 import type {
@@ -194,7 +200,7 @@ function loadDevice(): DeviceRegistration {
     form_factor: detectFormFactor(),
     instance_id: INSTANCE_ID,
     protocol: 1,
-    commands: [...WEB_REMOTE_COMMANDS],
+    commands: isTvShell() ? [...TV_REMOTE_COMMANDS] : [...WEB_REMOTE_COMMANDS],
   };
 }
 

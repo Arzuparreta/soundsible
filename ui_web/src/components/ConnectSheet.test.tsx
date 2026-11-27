@@ -123,3 +123,10 @@ it('switches one action from copying a track to moving the DJ session while the 
   expect(playCopy).not.toHaveBeenCalled();
   expect(mocks.transfer).toHaveBeenCalledWith('mac', state.device.device_id);
 });
+
+it('shows the TV icon for tv devices and mentions /tv/ setup in the sheet', async () => {
+  await open([device({ device_id: 'living-tv', device_name: 'Living Room TV', form_factor: 'tv' })]);
+  const tvRow = await screen.findByText('Living Room TV');
+  expect(tvRow).toBeInTheDocument();
+  expect(screen.getByText(/\/tv\//)).toBeInTheDocument();
+});
