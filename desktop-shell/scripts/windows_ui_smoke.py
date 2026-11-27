@@ -11,9 +11,11 @@ import struct
 import subprocess
 import time
 import wave
+from collections.abc import Mapping
 from pathlib import Path
 
 from PIL import ImageGrab
+from platformdirs import PlatformDirs
 from pywinauto import Desktop
 from pywinauto.keyboard import send_keys
 from pywinauto.timings import TimeoutError as UIATimeoutError
@@ -348,11 +350,69 @@ def quit_via_global_shortcut(process: subprocess.Popen, window) -> bool:
     raise RuntimeError("Global quit shortcut did not terminate Soundsible")
 
 
-def run_smoke(app_path: Path, artifact_path: Path) -> None:
+def default_config_dir() -> Path:
+    """Return the platform default Soundsible config directory."""
+    return Path(
+        PlatformDirs(appname="soundsible", appauthor=False).user_config_path
+    ).resolve()
+
+
+def legacy_roaming_config_dir() -> Path:
+    """Return the legacy Windows Roaming config directory."""
+    return Path(
+        PlatformDirs(
+            appname="soundsible", appauthor=False, roaming=True
+        ).user_config_path
+    ).resolve()
+
+
+def prepare_smoke_environment(
+    base_env: Mapping[str, str],
+    explicit_config_dir: Path | None,
+) -> tuple[dict[str, str], Path, Path | None]:
+    """Prepare environment variables and target config directories for the UI smoke."""
+    environment = dict(base_env)
+    # Hosted runners have no dependable GPU. Use WebView2's software renderer
+    # for this smoke, including the returning-user launch, without changing the
+    # installed application's normal rendering configuration.
+    environment["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
+        environment.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "") + " --disable-gpu"
+    ).strip()
+    if explicit_config_dir is not None:
+        resolved = explicit_config_dir.expanduser().resolve()
+        environment["SOUNDSIBLE_CONFIG_DIR"] = str(resolved)
+        return environment, resolved, None
+    environment.pop("SOUNDSIBLE_CONFIG_DIR", None)
+    resolved = default_config_dir()
+    roaming = legacy_roaming_config_dir()
+    return environment, resolved, roaming if roaming != resolved else None
+
+
+def run_smoke(
+    app_path: Path,
+    artifact_path: Path,
+    explicit_config_dir: Path | None = None,
+) -> None:
     runner_temp = Path(os.environ["RUNNER_TEMP"])
     music_path = runner_temp / "Música de prueba"
-    config_path = runner_temp / "soundsible-ui-config"
-    shutil.rmtree(config_path, ignore_errors=True)
+    environment, config_path, roaming_path = prepare_smoke_environment(
+        os.environ, explicit_config_dir
+    )
+    if explicit_config_dir is None:
+        existing = [
+            path
+            for path in (config_path, roaming_path)
+            if path is not None and path.exists()
+        ]
+        if existing:
+            if os.environ.get("GITHUB_ACTIONS", "").lower() != "true":
+                raise RuntimeError(
+                    "Refusing to clear an existing default Soundsible profile outside GitHub Actions; pass --config-dir."
+                )
+            for path in existing:
+                shutil.rmtree(path, ignore_errors=True)
+    else:
+        shutil.rmtree(config_path, ignore_errors=True)
     music_path.mkdir(parents=True, exist_ok=True)
     artifact_path.mkdir(parents=True, exist_ok=True)
 
@@ -360,14 +420,6 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         wav.setparams((1, 2, 8000, 800, "NONE", "not compressed"))
         wav.writeframes(struct.pack("<800h", *([0] * 800)))
 
-    environment = os.environ.copy()
-    environment["SOUNDSIBLE_CONFIG_DIR"] = str(config_path)
-    # Hosted runners have no dependable GPU. Use WebView2's software renderer
-    # for this smoke, including the returning-user launch, without changing the
-    # installed application's normal rendering configuration.
-    environment["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
-        environment.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "") + " --disable-gpu"
-    ).strip()
     state_file = config_path / "desktop-engine-state.json"
     process = subprocess.Popen([app_path], env=environment)
 
@@ -392,6 +444,26 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
 
         state = wait_for_engine_state(state_file)
         assert_healthy(state)
+        resolved_state_config = Path(state["config_dir"]).resolve()
+        if resolved_state_config != config_path:
+            raise RuntimeError(
+                f"Engine wrote config_dir {resolved_state_config} instead of {config_path}"
+            )
+        for required in ("desktop-client.json", "config.json", "music_dir.json"):
+            if not (config_path / required).is_file():
+                raise RuntimeError(
+                    f"Missing expected config file {required} in {config_path}"
+                )
+        if roaming_path is not None:
+            for unexpected in (
+                "desktop-engine-state.json",
+                "desktop-client.json",
+                "config.json",
+            ):
+                if (roaming_path / unexpected).exists():
+                    raise RuntimeError(
+                        f"Unexpected {unexpected} found in legacy roaming dir {roaming_path}"
+                    )
         window = player_window(process.pid)
         dump_tree(window, artifact_path / "player-ready-tree.txt")
         screenshot(artifact_path / "player-ready.png")
@@ -411,6 +483,10 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         window = main_window(process.pid)
         state = wait_for_engine_state(state_file)
         assert_healthy(state)
+        if Path(state["config_dir"]).resolve() != config_path:
+            raise RuntimeError(
+                f"Returning engine wrote config_dir {state['config_dir']} instead of {config_path}"
+            )
         window = player_window(process.pid)
         dump_tree(window, artifact_path / "returning-user-tree.txt")
         screenshot(artifact_path / "returning-user.png")
@@ -472,9 +548,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", type=Path, required=True)
     parser.add_argument("--artifacts", type=Path, required=True)
+    parser.add_argument("--config-dir", type=Path, default=None)
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     arguments = parse_args()
-    run_smoke(arguments.app.resolve(), arguments.artifacts.resolve())
+    run_smoke(
+        arguments.app.resolve(),
+        arguments.artifacts.resolve(),
+        explicit_config_dir=arguments.config_dir,
+    )

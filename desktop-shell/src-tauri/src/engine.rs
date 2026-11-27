@@ -4,7 +4,7 @@ use crate::state::{
     EngineRuntimeState,
 };
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -325,6 +325,15 @@ fn push_log(guard: &mut SupervisorInner, line: String) {
     }
 }
 
+fn configure_engine_command(command: &mut Command, launch_id: &str, config_dir: &Path) {
+    command
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("SOUNDSIBLE_CONFIG_DIR", config_dir)
+        .env("SOUNDSIBLE_DESKTOP_LAUNCH_ID", launch_id)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+}
+
 fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Child, String> {
     let root = repo_root();
     let mut command = if let Some(sidecar) = sidecar_binary() {
@@ -351,11 +360,8 @@ fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Chil
         cmd
     };
 
-    command
-        .env("PYTHONIOENCODING", "utf-8")
-        .env("SOUNDSIBLE_DESKTOP_LAUNCH_ID", &guard.launch_id)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    let config_dir = crate::state::config_dir();
+    configure_engine_command(&mut command, &guard.launch_id, &config_dir);
     command
         .spawn()
         .map_err(|e| format!("Failed to spawn engine: {e}"))
@@ -656,6 +662,33 @@ mod cancellation_tests {
         state.phase = EnginePhase::Ready;
         assert!(!fail_boot(&mut state, false));
         assert_eq!(state.phase, EnginePhase::Ready);
+    }
+
+    #[test]
+    fn engine_command_passes_resolved_config_dir_and_launch_id() {
+        let mut command = Command::new("soundsible-engine");
+        let config_dir = PathBuf::from("/tmp/soundsible-local-cfg");
+        configure_engine_command(&mut command, "launch-123", &config_dir);
+        let envs: std::collections::HashMap<&std::ffi::OsStr, Option<&std::ffi::OsStr>> =
+            command.get_envs().collect();
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("PYTHONIOENCODING"))
+                .copied()
+                .flatten(),
+            Some(std::ffi::OsStr::new("utf-8"))
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("SOUNDSIBLE_CONFIG_DIR"))
+                .copied()
+                .flatten(),
+            Some(config_dir.as_os_str())
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("SOUNDSIBLE_DESKTOP_LAUNCH_ID"))
+                .copied()
+                .flatten(),
+            Some(std::ffi::OsStr::new("launch-123"))
+        );
     }
 }
 

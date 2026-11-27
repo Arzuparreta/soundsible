@@ -583,6 +583,7 @@ pub fn run() {
             pairing::pairing_qr_data_url,
         ])
         .setup(|app| {
+            state::migrate_legacy_roaming_config();
             if let Err(error) = tray::build_tray(app.handle()) {
                 eprintln!("Desktop tray unavailable: {error}");
             }
