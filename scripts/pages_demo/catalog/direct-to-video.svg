@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <defs><linearGradient id="tape" x2="1" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#142426"/><stop offset="1" stop-color="#325b53"/></linearGradient></defs>
+  <path fill="url(#tape)" d="M0 0h400v400H0z"/>
+  <g transform="rotate(-22 200 200)">
+    <rect x="29" y="73" width="342" height="254" rx="116" fill="none" stroke="#b1cdb1" stroke-width="2"/>
+    <circle cx="128" cy="200" r="87" fill="#1a3130" stroke="#cde5bf" stroke-width="12"/>
+    <circle cx="272" cy="200" r="87" fill="#2d514a" stroke="#a7d0ad" stroke-width="12"/>
+    <circle cx="128" cy="200" r="36" fill="#e3bc83"/>
+    <circle cx="272" cy="200" r="36" fill="#e3bc83"/>
+  </g>
+</svg>

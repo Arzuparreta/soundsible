@@ -1,0 +1,15 @@
+/* The release player shares its layout with the station. Hide only controls
+   whose destinations require station services. Preserve space for the seek
+   strip when hiding the empty mini-player's DJ call to action. */
+[data-device-trigger],
+#now-playing-mode-dj,
+a[href="#/podcasts"],
+a[href="#/downloads"],
+a[href="#/import"],
+[data-omni-player]:not(:has([data-omni-cover][style])) [data-omni-meta] {
+  display: none !important;
+}
+
+[data-omni-player]:not(:has([data-omni-cover][style])) button:has(+ [data-omni-cover]) {
+  display: none !important;
+}

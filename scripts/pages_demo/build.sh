@@ -8,5 +8,6 @@ mkdir "$out"
 (cd "$ui" && node "$here/build.mjs" "$out")
 find "$out" -type f \( -name "*.br" -o -name "*.gz" \) -delete
 mv "$out/index.html" "$out/player.html"
-cp "$here"/{index.html,credits.html,cover.svg} "$out/"
-python3 "$here/music.py" "$out"
+sed -i 's|</head>|<link rel="stylesheet" href="./demo.css"></head>|;s|/player/icons/icon-192.png|./icons/icon-192.png|' "$out/player.html"
+cp "$here"/{index.html,demo.css} "$out/"
+python3 "$here/prepare.py" "$out"

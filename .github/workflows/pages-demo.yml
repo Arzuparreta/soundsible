@@ -1,0 +1,45 @@
+name: Pages demo
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/pages_demo/**'
+      - 'ui_web/**'
+      - 'branding/**'
+      - '.github/workflows/pages-demo.yml'
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  playback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui_web/package-lock.json
+      - run: npm ci --prefix ui_web
+      - run: scripts/pages_demo/build.sh "$RUNNER_TEMP/demo"
+      - name: Install the playback browsers
+        working-directory: ui_web
+        run: npx playwright install --with-deps chromium webkit
+      - name: Play the static bundle under a project path
+        run: |
+          (
+            cd ui_web
+            exec ./node_modules/.bin/vite preview --base /example/demo/ \
+              --outDir "$RUNNER_TEMP/demo" --host 127.0.0.1 --port 4186 --strictPort
+          ) &
+          server=$!
+          trap 'kill "$server"' EXIT
+          url=http://127.0.0.1:4186/example/demo/
+          curl --fail --silent --retry 10 --retry-connrefused "$url" > /dev/null
+          node scripts/pages_demo/smoke.mjs "$url"
+          node scripts/pages_demo/smoke.mjs "$url" webkit
