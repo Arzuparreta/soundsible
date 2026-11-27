@@ -1,28 +1,37 @@
 """
-Fast, confidence-gated lyrics resolution: LRCLIB first, lrc.red after it.
+Fast, confidence-gated lyrics resolution with non-blocking syllable enrichment.
 
-YouTube metadata is often a video title plus a channel name rather than a
-track signature.  The resolver normalizes that metadata locally, performs one
-broad LRCLIB search, and scores the returned candidates.  Deezer is only used
-as a short, bounded fallback when LRCLIB returns no candidates.
+Phase 1 (fast path, serves immediately):
+  LRCLIB (with bounded Deezer metadata canonicalization) is asked first. When
+  LRCLIB has no timed lines that fit the recording — nothing at all, plain text
+  only, an "instrumental" flag, lines timed for another length, or an outage —
+  lrc.red (TTML) is asked once, then NetEase (YRC/LRC) as a bounded third
+  fallback.
 
-When LRCLIB has no timed lines that fit the recording — nothing at all, plain
-text only, an "instrumental" flag, or lines timed for a cut of another length —
-lrc.red is asked once.  On 300 songs of a real collection that took timed
-lines that fit from 144 to 153; most of what it adds are songs LRCLIB does
-answer, only without usable timing
-(``docs/internal/measurements/lyrics-provider-comparison-2026-11-15.md``).
+Phase 2 (background enrichment, never blocks first render or drops coverage):
+  When a track has verified text (line-synced or plain) without word/syllable
+  timing yet, a dedicated zero-backlog worker looks up richer timing once:
+    1. lrc.red TTML (manual preferred, AI-aligned ``byModel`` accepted)
+    2. NetEase YRC (identity- and duration-verified)
+    3. LyricsPlus (Apple/QQ aggregator — strictly text-verified against the
+       already-verified lyrics with token Jaccard >= 0.60 so remixes and wrong
+       tracks are rejected)
+
+  Enriched timing is persisted separately in ``rich_synced`` / ``rich_source``
+  so existing line LRC and OpenSubsonic serving remain untouched.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import random
 import re
 import threading
 import time
 import unicodedata
+import xml.etree.ElementTree as ET
 from concurrent.futures import Future, ThreadPoolExecutor
 from difflib import SequenceMatcher
 from functools import partial
@@ -31,6 +40,14 @@ from typing import Any, Callable, Dict, Optional
 
 import requests
 
+from shared.lyrics_formats import (
+    parse_lrc,
+    parse_lyricsplus,
+    parse_rich_synced,
+    parse_ttml,
+    parse_yrc,
+    strip_netease_lrc_credits,
+)
 from shared.music_identity import canonical_music_identity
 
 logger = logging.getLogger(__name__)
@@ -38,18 +55,23 @@ logger = logging.getLogger(__name__)
 _LRCLIB_HOST = "https://lrclib.net"
 _DEEZER_HOST = "https://api.deezer.com"
 _LRC_RED_HOST = "https://lrc.red"
+_NETEASE_HOST = "https://music.163.com"
+_LYRICSPLUS_HOST = "https://lyricsplus.prjktla.my.id"
 _USER_AGENT = "Soundsible/1.0 (https://github.com/Arzuparreta/soundsible)"
 # lrc.red's terms ask every client to name itself with a link and a contact
 # address (https://lrc.red/api); the address is the one SECURITY.md publishes.
 _LRC_RED_CONTACT = "rubenpenarubio02@gmail.com"
 _LRC_RED_USER_AGENT = f"{_USER_AGENT} (contact: {_LRC_RED_CONTACT})"
+_MAX_PROVIDER_BODY_BYTES = 2 * 1024 * 1024
 
 # The common path makes one LRCLIB request.  Only a genuine no-result response
 # can spend the remaining budget on Deezer + one canonical LRCLIB retry.
 _TOTAL_BUDGET_SEC = 9.0
+_ENRICH_BUDGET_SEC = 8.0
 _LRCLIB_TIMEOUT_SEC = 8.0
 _DEEZER_TIMEOUT_SEC = 1.25
 _MIN_FALLBACK_BUDGET_SEC = 1.0
+_MIN_NETEASE_FALLBACK_BUDGET_SEC = 2.0
 _MIN_MATCH_SCORE = 0.72
 _MIN_TITLE_SCORE = 0.68
 # "Busy, ask again in a moment" answers, retried while the budget allows.
@@ -63,20 +85,34 @@ _LRCLIB_MIN_RETRY_REQUEST_SEC = 1.0
 RESOLVER_SOURCE = "lrclib:v6"
 #: Lines lrc.red supplied. Its terms ask for a credit wherever they are shown.
 LRC_RED_SOURCE = "lrc.red:v6"
-_CURRENT_SOURCES = frozenset({RESOLVER_SOURCE, LRC_RED_SOURCE})
+NETEASE_SOURCE = "netease:v6"
+_CURRENT_SOURCES = frozenset({RESOLVER_SOURCE, LRC_RED_SOURCE, NETEASE_SOURCE})
 #: Resolvers whose records carry a trustworthy ``synced_duration``.
-_LENGTH_SOURCES = frozenset({"lrclib:v5", RESOLVER_SOURCE, LRC_RED_SOURCE})
+_LENGTH_SOURCES = frozenset({"lrclib:v5", RESOLVER_SOURCE, LRC_RED_SOURCE, NETEASE_SOURCE})
 
-# Two requests (a search, then the lines) on a CDN that answers in ~0.1 s.
+#: Phase 2 rich-enrichment source tags.
+RICH_NONE_SOURCE = "none:v1"
+RICH_LRC_RED_SOURCE = "lrc.red:v1"
+RICH_LRC_RED_AI_SOURCE = "lrc.red:ai:v1"
+RICH_NETEASE_SOURCE = "netease:v1"
+RICH_LYRICSPLUS_SOURCE = "lyricsplus:v1"
+_RICH_LRC_RED_SOURCES = frozenset({RICH_LRC_RED_SOURCE, RICH_LRC_RED_AI_SOURCE})
+
+# Two requests (a search, then the TTML) on a CDN that answers in ~0.1 s.
 _LRC_RED_TIMEOUT_SEC = 3.0
+_NETEASE_TIMEOUT_SEC = 2.5
+_LYRICSPLUS_TIMEOUT_SEC = 3.5
 # The screen the provider comparison applied before counting a candidate as
-# the same song: stricter than LRCLIB's score, because lrc.red's search is a
-# loose full-text match that also returns other songs and other versions.
+# the same song: stricter than LRCLIB's score, because loose full-text search
+# also returns other songs and other versions.
 _LRC_RED_MIN_TITLE = 0.80
 _LRC_RED_MIN_ARTIST = 0.72
+_LYRICSPLUS_MIN_JACCARD = 0.60
+_LRC_RED_ENRICH_MIN_JACCARD = 0.50
 _ISRC_RE = re.compile(r"^[A-Z0-9]{12}$")
 
 _LOOKUP_WORKERS = 2
+_ENRICH_WORKERS = 2
 
 _SPACE_RE = re.compile(r"\s+")
 _VERSION_TOKENS = {
@@ -234,14 +270,59 @@ def audio_key(youtube_id: Optional[str] = None, track_id: Optional[str] = None) 
 
 def has_text(record: Optional[Dict[str, Any]]) -> bool:
     """Whether a lyrics record holds anything to show."""
-    return bool(record and (record.get("synced") or record.get("plain") or record.get("instrumental")))
+    return bool(
+        record and (record.get("synced") or record.get("plain") or record.get("instrumental") or record.get("rich_synced"))
+    )
 
 
 def provider(record: Optional[Dict[str, Any]]) -> Optional[str]:
-    """Who supplied a record's lyrics: ``"lrc.red"``, ``"lrclib"``, or nobody."""
+    """Who supplied a record's line/plain lyrics: ``"lrc.red"``, ``"netease"``, ``"lrclib"``, or nobody.
+
+    Used by OpenSubsonic (which only serves line/plain text and never exposes
+    ``rich_synced``), so enriching an LRCLIB row with lrc.red rich timing does
+    not remove LRCLIB's line lyrics from Subsonic clients.
+    """
     if not has_text(record):
         return None
-    return "lrc.red" if record.get("source") == LRC_RED_SOURCE else "lrclib"
+    source = record.get("source")
+    if source == LRC_RED_SOURCE:
+        return "lrc.red"
+    if source == NETEASE_SOURCE:
+        return "netease"
+    return "lrclib"
+
+
+def display_provider(record: Optional[Dict[str, Any]], *, include_rich: bool = True) -> Optional[str]:
+    """Who to credit in players that render rich timing alongside line lyrics.
+
+    Whenever lrc.red supplied either the line lyrics or the rendered rich
+    timing, returns ``"lrc.red"`` so its attribution link is shown.
+    """
+    if not has_text(record):
+        return None
+    if include_rich and parse_rich_synced(record.get("rich_synced")) is not None:
+        if record.get("rich_source") in _RICH_LRC_RED_SOURCES:
+            return "lrc.red"
+    return provider(record)
+
+
+def record_text(record: Optional[Dict[str, Any]]) -> str:
+    """Plain lyric text from a record, used to text-verify enrichment candidates."""
+    if not record:
+        return ""
+    if record.get("plain"):
+        return str(record["plain"])
+    if record.get("synced"):
+        return "\n".join(text for _, text in parse_lrc(record["synced"]) if text)
+    return ""
+
+
+def _text_jaccard(left: str, right: str) -> float:
+    a = set(_fold(left).split())
+    b = set(_fold(right).split())
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
 
 
 def timing_fits(record: Optional[Dict[str, Any]], audio_duration: Any) -> bool:
@@ -261,13 +342,30 @@ def timing_fits(record: Optional[Dict[str, Any]], audio_duration: Any) -> bool:
     return not (audio > 0 and stamps and stamps[-1][0] / 1000 > audio + TIMING_TOLERANCE_SEC)
 
 
+def rich_timing_fits(rich: Optional[Dict[str, Any]], audio_duration: Any) -> bool:
+    """Whether a ``rich_synced`` payload fits a recording of this length."""
+    if not rich or not isinstance(rich.get("lines"), list) or not rich["lines"]:
+        return False
+    if not synced_timing_fits(audio_duration, rich.get("dur")):
+        return False
+    try:
+        audio = float(audio_duration or 0)
+    except (TypeError, ValueError):
+        return True
+    if audio <= 0:
+        return True
+    last_ms = max((int(line.get("t") or 0) for line in rich["lines"] if isinstance(line, dict)), default=0)
+    return last_ms / 1000.0 <= audio + TIMING_TOLERANCE_SEC
+
+
 def worth_looking_up_again(record: Optional[Dict[str, Any]], audio_duration: Any) -> bool:
     """Lyrics cached by an older resolver that the current one could improve.
 
     Timed lines that predate their length are looked up so the length can be
     checked; anything without timed lines that fit the recording, because
-    lrc.red may have them. Lines that already fit are left alone. Until the
-    lookup lands, and if it finds nothing, what is held keeps being served.
+    lrc.red / NetEase may have them. Lines that already fit are left alone.
+    Until the lookup lands, and if it finds nothing, what is held keeps being
+    served.
     """
     if not record or record.get("source") in _CURRENT_SOURCES:
         return False
@@ -276,8 +374,22 @@ def worth_looking_up_again(record: Optional[Dict[str, Any]], audio_duration: Any
     return not timing_fits(record, audio_duration)
 
 
+def worth_enriching(record: Optional[Dict[str, Any]]) -> bool:
+    """Whether a cached lyrics record should undergo once-only Phase 2 rich enrichment."""
+    if not record or record.get("instrumental"):
+        return False
+    if not (record.get("synced") or record.get("plain")):
+        return False
+    if record.get("rich_synced") or record.get("rich_source"):
+        return False
+    return True
+
+
 def store(db: Any, key: str, record: Dict[str, Any]) -> None:
     """Cache a resolved record under a track id or a metadata key."""
+    rich = record.get("rich_synced")
+    if isinstance(rich, dict):
+        rich = json.dumps(rich, ensure_ascii=False, separators=(",", ":"))
     db.set_lyrics(
         key,
         synced=record["synced"],
@@ -285,6 +397,8 @@ def store(db: Any, key: str, record: Dict[str, Any]) -> None:
         instrumental=record["instrumental"],
         source=record["source"],
         synced_duration=record.get("synced_duration"),
+        rich_synced=rich,
+        rich_source=record.get("rich_source"),
     )
 
 
@@ -299,9 +413,29 @@ def settle_upgrade(db: Any, key: str, held: Dict[str, Any], found: Optional[Dict
         store(db, key, found)
         return found
     length = held.get("synced_duration") if held.get("source") in _LENGTH_SOURCES else None
-    kept = {**held, "source": RESOLVER_SOURCE, "synced_duration": length}
+    kept = {
+        **held,
+        "source": RESOLVER_SOURCE,
+        "synced_duration": length,
+        "rich_synced": held.get("rich_synced"),
+        "rich_source": held.get("rich_source"),
+    }
     store(db, key, kept)
     return kept
+
+
+def settle_enrichment(db: Any, key: str, found: Optional[Dict[str, Any]]) -> None:
+    """Persist a completed Phase 2 enrichment result without altering line LRC."""
+    if found is None:
+        return
+    rich = found.get("rich_synced")
+    if isinstance(rich, dict):
+        rich = json.dumps(rich, ensure_ascii=False, separators=(",", ":"))
+    db.set_lyrics_enrichment(
+        key,
+        rich_synced=rich,
+        rich_source=found.get("rich_source") or RICH_NONE_SOURCE,
+    )
 
 
 def synced_timing_fits(audio_duration: Any, synced_duration: Any) -> bool:
@@ -478,61 +612,88 @@ def _lrclib_lookup(
     return _empty_record()
 
 
-def _lrc_red_get(path: str, params: Optional[Dict[str, Any]], timeout_sec: float) -> Optional[requests.Response]:
+def _bounded_get(
+    url: str,
+    params: Optional[Dict[str, Any]],
+    headers: Dict[str, str],
+    timeout_sec: float,
+) -> Optional[requests.Response]:
     resp = requests.get(
-        f"{_LRC_RED_HOST}{path}",
+        url,
         params=params,
-        headers={"User-Agent": _LRC_RED_USER_AGENT},
+        headers=headers,
         timeout=_timeout_parts(timeout_sec, 1.0),
     )
     if resp.status_code == 404:
         return None
     resp.raise_for_status()
+    content = getattr(resp, "content", None)
+    if isinstance(content, (bytes, bytearray)) and len(content) > _MAX_PROVIDER_BODY_BYTES:
+        raise ValueError("Provider response exceeds size cap")
     return resp
 
 
+def _lrc_red_get(path: str, params: Optional[Dict[str, Any]], timeout_sec: float) -> Optional[requests.Response]:
+    return _bounded_get(
+        f"{_LRC_RED_HOST}{path}",
+        params,
+        {"User-Agent": _LRC_RED_USER_AGENT},
+        timeout_sec,
+    )
+
+
+def _netease_get(path: str, params: Optional[Dict[str, Any]], timeout_sec: float) -> Optional[requests.Response]:
+    return _bounded_get(
+        f"{_NETEASE_HOST}{path}",
+        params,
+        {"User-Agent": _USER_AGENT, "Referer": f"{_NETEASE_HOST}/"},
+        timeout_sec,
+    )
+
+
+def _lyricsplus_get(params: Dict[str, Any], timeout_sec: float) -> Optional[requests.Response]:
+    return _bounded_get(
+        f"{_LYRICSPLUS_HOST}/v2/lyrics/get",
+        params,
+        {"User-Agent": _USER_AGENT},
+        timeout_sec,
+    )
+
+
+def _screen_hit(
+    artist: str,
+    title: str,
+    duration: Optional[int],
+    cand_artist: Any,
+    cand_title: Any,
+    cand_duration: Any,
+) -> Optional[float]:
+    """Return combined title+artist similarity if a candidate passes identity
+    and duration screening, or ``None``."""
+    title_score = _similarity(title, cand_title)
+    if title_score < _LRC_RED_MIN_TITLE:
+        return None
+    artist_names = cand_artist if isinstance(cand_artist, list) else [cand_artist]
+    artist_score = max((_similarity(artist, name) for name in artist_names if name), default=0.0)
+    if (
+        artist_score < _LRC_RED_MIN_ARTIST
+        or _version_tokens(title) != _version_tokens(cand_title)
+        or not synced_timing_fits(duration, cand_duration)
+    ):
+        return None
+    return title_score + artist_score
+
+
 def _lrc_red_hit(hits: Any, artist: str, title: str, duration: Optional[int]) -> Optional[Dict[str, Any]]:
-    """The search hit that is this song, recorded at this length, timed by hand.
-
-    Timing lrc.red generated with a model (``byModel``) is passed over: nothing
-    here can check it against the audio. A hit whose recording is longer or
-    shorter than the one playing would bring lines that drift off the singer.
-    """
-    ranked: list[tuple[float, Dict[str, Any]]] = []
+    """Best matching lrc.red search hit; manual timing ranks ahead of ``byModel``."""
+    ranked: list[tuple[bool, float, Dict[str, Any]]] = []
     for hit in hits if isinstance(hits, list) else []:
-        if not isinstance(hit, dict) or hit.get("byModel") or not _ISRC_RE.match(str(hit.get("isrc") or "")):
+        if not isinstance(hit, dict) or not _ISRC_RE.match(str(hit.get("isrc") or "")):
             continue
-        title_score = _similarity(title, hit.get("title"))
-        artist_score = _similarity(artist, hit.get("artist"))
-        if (
-            title_score < _LRC_RED_MIN_TITLE
-            or artist_score < _LRC_RED_MIN_ARTIST
-            or _version_tokens(title) != _version_tokens(hit.get("title"))
-            or not synced_timing_fits(duration, hit.get("duration"))
-        ):
-            continue
-        ranked.append((title_score + artist_score, hit))
-    return max(ranked, key=lambda row: row[0])[1] if ranked else None
-
-
-_WORD_STAMP = re.compile(r"<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>")
-
-
-def _line_lrc(text: str) -> list[str]:
-    """Enhanced LRC as plain line LRC: the timed lines, without word stamps.
-
-    lrc.red writes each word's start inside its line (``<00:01.20>word``); the
-    players follow lines, and would show those stamps as lyric text.
-    """
-    lines = []
-    for raw in str(text or "").splitlines():
-        stamps = list(_LRC_TIMESTAMP.finditer(raw))
-        if not stamps or stamps[0].start() != 0:
-            continue
-        head = raw[: stamps[-1].end()]
-        words = _SPACE_RE.sub(" ", _WORD_STAMP.sub("", raw[stamps[-1].end():])).strip()
-        lines.append(f"{head}{words}")
-    return lines
+        score = _screen_hit(artist, title, duration, hit.get("artist"), hit.get("title"), hit.get("duration"))
+        if score is not None:
+            ranked.append((not bool(hit.get("byModel")), score, hit))
+    return max(ranked, key=lambda row: (row[0], row[1]))[2] if ranked else None
 
 
 def _lrc_red_lookup(
@@ -540,36 +701,141 @@ def _lrc_red_lookup(
     title: str,
     duration: Optional[int],
     deadline: float,
+    *,
+    require_rich: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """lrc.red's timed lines for this recording, or ``None`` when it has none."""
-    found = _lrc_red_get(
-        "/search.json",
-        {"q": f"{title} {artist}"},
-        _remaining(deadline, _LRC_RED_TIMEOUT_SEC),
-    )
+    """lrc.red's timed lines (and optional syllable/word TTML) for this recording."""
+    found = _lrc_red_get("/search.json", {"q": f"{title} {artist}"}, _remaining(deadline, _LRC_RED_TIMEOUT_SEC))
     payload = found.json() if found is not None else None
     hit = _lrc_red_hit(payload.get("hits") if isinstance(payload, dict) else None, artist, title, duration)
     if not hit or deadline - time.monotonic() < 0.2:
         return None
-    # LRC exists only for timed tracks; anything else answers 404.
-    body = _lrc_red_get(f"/s/{hit['isrc']}.lrc", None, _remaining(deadline, _LRC_RED_TIMEOUT_SEC))
-    lines = _line_lrc(body.text) if body is not None else []
-    synced = "\n".join(lines)
-    stamps = parse_lrc(synced)
-    if not stamps:
+    body = _lrc_red_get(f"/s/{hit['isrc']}.ttml", None, _remaining(deadline, _LRC_RED_TIMEOUT_SEC))
+    if body is None:
         return None
     try:
         length = int(round(float(hit.get("duration")))) or None
     except (TypeError, ValueError):
         length = None
+    synced, plain, rich_synced = parse_ttml(body.text, duration=length)
+    if not synced or (require_rich and rich_synced is None):
+        return None
+    rich_source = (RICH_LRC_RED_AI_SOURCE if hit.get("byModel") else RICH_LRC_RED_SOURCE) if rich_synced else None
     record = {
         "synced": synced,
-        "plain": "\n".join(text for _, text in stamps if text) or None,
+        "plain": plain,
         "instrumental": False,
         "source": LRC_RED_SOURCE,
         "synced_duration": length,
+        "rich_synced": rich_synced,
+        "rich_source": rich_source,
     }
     return record if timing_fits(record, duration) else None
+
+
+def _netease_lookup(
+    artist: str,
+    title: str,
+    duration: Optional[int],
+    deadline: float,
+    *,
+    require_rich: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """NetEase Cloud Music YRC (word-timed) and LRC fallback, identity-screened."""
+    search = _netease_get(
+        "/api/search/get",
+        {"s": f"{title} {artist}", "type": 1, "limit": 5},
+        _remaining(deadline, _NETEASE_TIMEOUT_SEC),
+    )
+    data = search.json() if search is not None else None
+    songs = (data.get("result") or {}).get("songs") if isinstance(data, dict) and data.get("code") == 200 and isinstance(data.get("result"), dict) else None
+    ranked: list[tuple[float, Dict[str, Any], Optional[int]]] = []
+    for song in songs if isinstance(songs, list) else []:
+        if not isinstance(song, dict) or not song.get("id"):
+            continue
+        names = [str(a.get("name") or "") for a in (song.get("artists") or []) if isinstance(a, dict)]
+        try:
+            dur_ms = float(song.get("duration") or 0)
+            dur_sec = int(round(dur_ms / 1000.0)) if dur_ms > 0 else None
+        except (TypeError, ValueError):
+            dur_sec = None
+        score = _screen_hit(artist, title, duration, [", ".join(names)] + names, song.get("name"), dur_sec)
+        if score is not None:
+            ranked.append((score, song, dur_sec))
+    if not ranked or deadline - time.monotonic() < 0.2:
+        return None
+    _, song, dur_sec = max(ranked, key=lambda row: row[0])
+    lyric_resp = _netease_get(
+        "/api/song/lyric",
+        {"id": song["id"], "lv": 1, "yv": 1, "tv": 0},
+        _remaining(deadline, _NETEASE_TIMEOUT_SEC),
+    )
+    lyric_data = lyric_resp.json() if lyric_resp is not None else None
+    if not isinstance(lyric_data, dict) or lyric_data.get("code") != 200 or lyric_data.get("nolyric"):
+        return None
+
+    yrc_text = ((lyric_data.get("yrc") or {}).get("lyric") or "") if isinstance(lyric_data.get("yrc"), dict) else ""
+    if yrc_text.strip():
+        synced, plain, rich_synced = parse_yrc(yrc_text, duration=dur_sec)
+        if synced and (rich_synced is not None or not require_rich):
+            record = {
+                "synced": synced,
+                "plain": plain,
+                "instrumental": False,
+                "source": NETEASE_SOURCE,
+                "synced_duration": dur_sec,
+                "rich_synced": rich_synced,
+                "rich_source": RICH_NETEASE_SOURCE if rich_synced is not None else None,
+            }
+            if timing_fits(record, duration):
+                return record
+
+    if require_rich:
+        return None
+
+    lrc_raw = ((lyric_data.get("lrc") or {}).get("lyric") or "") if isinstance(lyric_data.get("lrc"), dict) else ""
+    synced_lrc = strip_netease_lrc_credits(lrc_raw)
+    stamps = parse_lrc(synced_lrc) if synced_lrc else []
+    if not stamps:
+        return None
+    record = {
+        "synced": synced_lrc,
+        "plain": "\n".join(text for _, text in stamps if text) or None,
+        "instrumental": False,
+        "source": NETEASE_SOURCE,
+        "synced_duration": dur_sec,
+        "rich_synced": None,
+        "rich_source": None,
+    }
+    return record if timing_fits(record, duration) else None
+
+
+def _lyricsplus_lookup(
+    artist: str,
+    title: str,
+    album: Optional[str],
+    duration: Optional[int],
+    reference_text: str,
+    deadline: float,
+) -> Optional[Dict[str, Any]]:
+    """Best-effort LyricsPlus enrichment, accepted ONLY when text-verified
+    against ``reference_text`` (token Jaccard >= 0.60) and duration-compatible."""
+    if not reference_text or deadline - time.monotonic() < 0.3:
+        return None
+    params: Dict[str, Any] = {"title": title, "artist": artist}
+    if album:
+        params["album"] = album
+    if duration:
+        params["duration"] = int(round(float(duration)))
+    resp = _lyricsplus_get(params, _remaining(deadline, _LYRICSPLUS_TIMEOUT_SEC))
+    if resp is None:
+        return None
+    plain, rich_synced = parse_lyricsplus(resp.json())
+    if not plain or rich_synced is None or not rich_timing_fits(rich_synced, duration):
+        return None
+    if _text_jaccard(plain, reference_text) < _LYRICSPLUS_MIN_JACCARD:
+        return None
+    return {"rich_synced": rich_synced, "rich_source": RICH_LYRICSPLUS_SOURCE}
 
 
 def fetch_lyrics(
@@ -578,8 +844,9 @@ def fetch_lyrics(
     album: Optional[str] = None,
     duration: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Resolve lyrics without using downloader queues or their workers.
+    """Phase 1 fast lyrics resolution without using downloader queues or workers.
 
+    Order: LRCLIB (with Deezer metadata fallback) -> lrc.red TTML -> NetEase.
     Returns an empty record for a confident provider-level not-found response,
     or ``None`` for network/provider errors so callers do not negative-cache a
     transient outage.
@@ -589,41 +856,96 @@ def fetch_lyrics(
 
     deadline = time.monotonic() + _TOTAL_BUDGET_SEC
     clean_artist, clean_title = _canonical_metadata(artist, title)
-    record: Optional[Dict[str, Any]]
+    record: Optional[Dict[str, Any]] = None
     try:
         record = _lrclib_lookup(clean_artist, clean_title, album, duration, deadline)
-    except requests.RequestException as exc:
-        logger.warning("Lyrics provider request failed for %s - %s: %s", artist, title, exc)
-        record = None
-    except (ValueError, KeyError, TypeError) as exc:
-        logger.warning("Lyrics response parse error for %s - %s: %s", artist, title, exc)
-        record = None
+    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+        logger.warning("Lyrics provider failed for %s - %s: %s", artist, title, exc)
     if timing_fits(record, duration) or deadline - time.monotonic() < _MIN_FALLBACK_BUDGET_SEC:
         return record
 
-    # LRCLIB's lines stay the answer unless lrc.red has timed lines that fit;
-    # when LRCLIB could not be reached, lrc.red's are better than an outage.
-    try:
-        return _lrc_red_lookup(clean_artist, clean_title, duration, deadline) or record
-    except requests.RequestException as exc:
-        logger.warning("lrc.red request failed for %s - %s: %s", artist, title, exc)
-    except (ValueError, KeyError, TypeError) as exc:
-        logger.warning("lrc.red response parse error for %s - %s: %s", artist, title, exc)
+    for name, min_budget, fn in (
+        ("lrc.red", _MIN_FALLBACK_BUDGET_SEC, _lrc_red_lookup),
+        ("NetEase", _MIN_NETEASE_FALLBACK_BUDGET_SEC, _netease_lookup),
+    ):
+        if deadline - time.monotonic() < min_budget:
+            break
+        try:
+            hit = fn(clean_artist, clean_title, duration, deadline)
+            if hit is not None:
+                return hit
+        except (requests.RequestException, ValueError, KeyError, TypeError, ET.ParseError) as exc:
+            logger.warning("%s fallback failed for %s - %s: %s", name, artist, title, exc)
     return record
 
 
-class _LyricsLookupCoordinator:
-    """Two dedicated workers, single-flight keys, and deliberately no queue.
+def enrich_lyrics(
+    artist: str,
+    title: str,
+    album: Optional[str] = None,
+    duration: Optional[int] = None,
+    *,
+    reference_text: str = "",
+    existing_source: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Phase 2 non-blocking enrichment for word/syllable timing.
 
-    A semaphore is acquired before submitting to ThreadPoolExecutor, so its
-    internal work queue never accumulates waiting lyrics tasks. When both
-    workers are occupied the API responds ``pending`` and the client retries.
-    Downloader workers are entirely separate from this coordinator.
+    Hierarchy: lrc.red TTML (manual preferred, AI ``byModel`` accepted) ->
+    NetEase YRC -> LyricsPlus (strictly text-verified via Jaccard >= 0.60).
+    Returns ``None`` only when every attempted provider suffered a transport
+    failure so callers can retry on a later play.
     """
+    if not artist or not title:
+        return None
+    deadline = time.monotonic() + _ENRICH_BUDGET_SEC
+    clean_artist, clean_title = _canonical_metadata(artist, title)
+    clean_response = False
 
-    def __init__(self) -> None:
-        self._executor = ThreadPoolExecutor(max_workers=_LOOKUP_WORKERS, thread_name_prefix="soundsible-lyrics")
-        self._slots = threading.BoundedSemaphore(_LOOKUP_WORKERS)
+    def try_lrc_red():
+        hit = _lrc_red_lookup(clean_artist, clean_title, duration, deadline, require_rich=True)
+        if not hit or not hit.get("rich_synced"):
+            return None
+        if reference_text and _text_jaccard(hit.get("plain") or "", reference_text) < _LRC_RED_ENRICH_MIN_JACCARD:
+            return None
+        return {"rich_synced": hit["rich_synced"], "rich_source": hit["rich_source"]}
+
+    def try_netease():
+        hit = _netease_lookup(clean_artist, clean_title, duration, deadline, require_rich=True)
+        if not hit or not hit.get("rich_synced"):
+            return None
+        return {"rich_synced": hit["rich_synced"], "rich_source": hit["rich_source"] or RICH_NETEASE_SOURCE}
+
+    def try_lyricsplus():
+        return _lyricsplus_lookup(clean_artist, clean_title, album, duration, reference_text, deadline)
+
+    steps = []
+    if existing_source != LRC_RED_SOURCE:
+        steps.append(("lrc.red", try_lrc_red))
+    if existing_source != NETEASE_SOURCE:
+        steps.append(("NetEase", try_netease))
+    if reference_text:
+        steps.append(("LyricsPlus", try_lyricsplus))
+
+    for name, step in steps:
+        if deadline - time.monotonic() < 0.5:
+            break
+        try:
+            result = step()
+            clean_response = True
+            if result and result.get("rich_synced"):
+                return result
+        except (requests.RequestException, ValueError, KeyError, TypeError, ET.ParseError) as exc:
+            logger.debug("%s enrichment failed for %s - %s: %s", name, artist, title, exc)
+
+    return {"rich_synced": None, "rich_source": RICH_NONE_SOURCE} if clean_response else None
+
+
+class _LyricsLookupCoordinator:
+    """Bounded dedicated workers, single-flight keys, and deliberately no queue."""
+
+    def __init__(self, workers: int = _LOOKUP_WORKERS, prefix: str = "soundsible-lyrics") -> None:
+        self._executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix=prefix)
+        self._slots = threading.BoundedSemaphore(workers)
         self._lock = threading.Lock()
         self._jobs: dict[str, Future] = {}
 
@@ -636,14 +958,6 @@ class _LyricsLookupCoordinator:
     def poll_or_start(
         self, key: str, fn, *, forget_when_done: bool = False, needed: Optional[Callable[[], bool]] = None,
     ) -> tuple[str, Optional[Dict[str, Any]]]:
-        """``forget_when_done`` is for a lookup that reports its own result:
-        nobody comes back to collect it, so it must not stay held here.
-
-        ``needed``, asked under the lock before a new lookup starts, lets the
-        caller re-check what that lookup would settle. A forgotten lookup has
-        already reported, so a caller that read its state before the report
-        landed sees the report here instead of starting the lookup again.
-        """
         with self._lock:
             job = self._jobs.get(key)
             if job is not None:
@@ -666,7 +980,6 @@ class _LyricsLookupCoordinator:
                 self._slots.release()
                 raise
             self._jobs[key] = future
-        # Outside the lock: a lookup already finished runs its callback here.
         if forget_when_done:
             future.add_done_callback(partial(self._forget, key))
         return "pending", None
@@ -681,7 +994,8 @@ class _LyricsLookupCoordinator:
             self._jobs.clear()
 
 
-_LOOKUPS = _LyricsLookupCoordinator()
+_LOOKUPS = _LyricsLookupCoordinator(_LOOKUP_WORKERS, "soundsible-lyrics")
+_ENRICHMENTS = _LyricsLookupCoordinator(_ENRICH_WORKERS, "soundsible-lyrics-enrich")
 
 
 def _lookup_key(artist: str, title: str, album: Optional[str], duration: Optional[int]) -> str:
@@ -703,14 +1017,30 @@ def metadata_cache_key(
     album: Optional[str] = None,
     duration: Optional[int] = None,
 ) -> str:
-    """Stable, opaque cache identity for a metadata-only streaming track.
-
-    Preview ids are transport identities and may change, but the normalized
-    signature used to resolve the lyrics is stable. Hashing also avoids
-    persisting user-supplied metadata verbatim as a SQLite primary key.
-    """
+    """Stable, opaque cache identity for a metadata-only streaming track."""
     digest = hashlib.sha256(_lookup_key(artist, title, album, duration).encode("utf-8")).hexdigest()
     return f"metadata-lyrics:{digest}"
+
+
+def _poll(
+    coordinator: _LyricsLookupCoordinator,
+    key: str,
+    lookup: Callable[[], Optional[Dict[str, Any]]],
+    on_complete: Optional[Callable[[Optional[Dict[str, Any]]], Any]] = None,
+    needed: Optional[Callable[[], bool]] = None,
+) -> tuple[str, Optional[Dict[str, Any]]]:
+    if on_complete is None:
+        return coordinator.poll_or_start(key, lookup, needed=needed)
+
+    def run_and_report():
+        result = lookup()
+        try:
+            on_complete(result)
+        except Exception as exc:
+            logger.warning("Lyrics completion callback failed: %s", exc)
+        return result
+
+    return coordinator.poll_or_start(key, run_and_report, forget_when_done=True, needed=needed)
 
 
 def poll_lyrics(
@@ -721,55 +1051,45 @@ def poll_lyrics(
     on_complete: Optional[Callable[[Optional[Dict[str, Any]]], Any]] = None,
     needed: Optional[Callable[[], bool]] = None,
 ) -> tuple[str, Optional[Dict[str, Any]]]:
-    """Poll/start a bounded background lookup.
-
-    Status is ``complete``, ``pending``, ``busy`` or ``settled``. Busy means
-    both dedicated workers are active; no server-side task was buffered.
-    ``on_complete``, if this call starts the lookup, receives its record on the
-    worker as soon as it lands — for a caller that will not come back to
-    collect it. ``needed`` is checked before a new lookup starts; when it says
-    no, nothing starts and the status is ``settled``: what the caller read is
-    out of date, and it reads again.
-    """
-    key = _lookup_key(artist, title, album, duration)
-    lookup = partial(fetch_lyrics, artist, title, album, duration)
-    if on_complete is not None:
-        def lookup_and_report(fetch=lookup):
-            record = fetch()
-            try:
-                on_complete(record)
-            except Exception as exc:
-                logger.warning("Lyrics completion callback failed: %s", exc)
-            return record
-
-        return _LOOKUPS.poll_or_start(key, lookup_and_report, forget_when_done=True, needed=needed)
-    return _LOOKUPS.poll_or_start(key, lookup, needed=needed)
+    """Poll/start a bounded Phase 1 background lookup."""
+    return _poll(
+        _LOOKUPS,
+        _lookup_key(artist, title, album, duration),
+        partial(fetch_lyrics, artist, title, album, duration),
+        on_complete,
+        needed,
+    )
 
 
-_LRC_TIMESTAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")
-
-
-def parse_lrc(text: str) -> list[tuple[int, str]]:
-    """LRC text as ``(offset in milliseconds, line)``, in time order.
-
-    The player parses this in the browser; a client that speaks a protocol with
-    timed lyrics needs the same reading server-side. One line may carry several
-    stamps — that is how an LRC file writes a repeated chorus — so each becomes
-    its own entry.
-    """
-    lines: list[tuple[int, str]] = []
-    for raw in str(text or "").splitlines():
-        stamps = list(_LRC_TIMESTAMP.finditer(raw))
-        if not stamps:
-            continue
-        content = raw[stamps[-1].end():].strip()
-        for stamp in stamps:
-            minutes, seconds, fraction = stamp.groups()
-            # Two digits after the separator are hundredths, three are millis.
-            millis = int((fraction or "0").ljust(3, "0")[:3]) if fraction else 0
-            lines.append((int(minutes) * 60_000 + int(seconds) * 1000 + millis, content))
-    return sorted(lines, key=lambda entry: entry[0])
+def poll_enrichment(
+    artist: str,
+    title: str,
+    album: Optional[str] = None,
+    duration: Optional[int] = None,
+    *,
+    reference_text: str = "",
+    existing_source: Optional[str] = None,
+    on_complete: Optional[Callable[[Optional[Dict[str, Any]]], Any]] = None,
+    needed: Optional[Callable[[], bool]] = None,
+) -> tuple[str, Optional[Dict[str, Any]]]:
+    """Poll/start a bounded Phase 2 background rich-timing enrichment."""
+    return _poll(
+        _ENRICHMENTS,
+        f"enrich:v1\x00{_lookup_key(artist, title, album, duration)}",
+        partial(
+            enrich_lyrics,
+            artist,
+            title,
+            album,
+            duration,
+            reference_text=reference_text,
+            existing_source=existing_source,
+        ),
+        on_complete,
+        needed,
+    )
 
 
 def _reset_lyrics_jobs_for_tests() -> None:
     _LOOKUPS.clear_for_tests()
+    _ENRICHMENTS.clear_for_tests()

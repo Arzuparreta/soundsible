@@ -30,6 +30,7 @@ vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 
 import { LyricsPanel } from './LyricsPanel';
 import { LyricsPanelView } from './LyricsPanelView';
+import { groupRichWords, segmentFill } from '../lib/lrc';
 
 describe('LyricsPanel', () => {
   beforeEach(() => {
@@ -418,6 +419,124 @@ describe('LyricsPanel', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'lyricsPanel.adjust' }));
       fireEvent.click(screen.getByRole('button', { name: 'lyricsPanel.resetTiming' }));
       expect(api.setLyricsOffset).toHaveBeenCalledWith({ trackId: 'song', offsetMs: null });
+    });
+  });
+
+  describe('rich syllable and word timing', () => {
+    const RICH = {
+      granularity: 'syllable' as const,
+      dur: 200,
+      lines: [
+        {
+          t: 1000,
+          e: 3000,
+          s: [
+            { t: 1000, e: 1500, x: 'Long ' },
+            { t: 1500, e: 2000, x: 'e' },
+            { t: 2000, e: 3000, x: 'nough' },
+          ],
+        },
+        {
+          t: 5000,
+          e: 7000,
+          s: [
+            { t: 5000, e: 6000, x: 'Second ' },
+            { t: 6000, e: 7000, x: 'line' },
+          ],
+        },
+      ],
+    };
+
+    it('groups syllables into non-breaking words and computes fill progress', () => {
+      const words = groupRichWords(RICH.lines[0].s);
+      expect(words).toHaveLength(2);
+      expect(words[0]).toEqual({ segments: [{ t: 1000, e: 1500, x: 'Long' }], trailingSpace: true });
+      expect(words[1]).toEqual({
+        segments: [
+          { t: 1500, e: 2000, x: 'e' },
+          { t: 2000, e: 3000, x: 'nough' },
+        ],
+        trailingSpace: false,
+      });
+      expect(segmentFill({ t: 1500, e: 2000, x: 'e' }, 1400)).toBe(0);
+      expect(segmentFill({ t: 1500, e: 2000, x: 'e' }, 1750)).toBe(0.5);
+      expect(segmentFill({ t: 1500, e: 2000, x: 'e' }, 2100)).toBe(1);
+    });
+
+    it('renders syllable spans only on the active line and keeps accessible line text intact', async () => {
+      state.playback.currentTime = 1.75;
+      api.getTrackLyrics.mockResolvedValue({
+        status: 'ready',
+        synced: '[00:01.00]Long enough\n[00:05.00]Second line',
+        rich_synced: RICH,
+        plain: 'Long enough\nSecond line',
+        instrumental: false,
+        cached: true,
+        timing_safe: true,
+        provider: 'lrc.red',
+      });
+
+      const { container } = render(() => <LyricsPanel />);
+      const activeBtn = await screen.findByRole('button', { name: 'Long enough' });
+      expect(activeBtn).toHaveAttribute('aria-current', 'true');
+      const syls = activeBtn.querySelectorAll('[data-syllable]');
+      expect(syls).toHaveLength(3);
+      // "Long" is done (1000..1500 <= 1750), "e" is halfway (1500..2000 at 1750), "nough" is idle (2000..3000).
+      expect(syls[0].getAttribute('style')).toBeNull();
+      expect(syls[1].getAttribute('style')).toContain('--syl-fill: 50.0%');
+      expect(syls[2].getAttribute('style')).toBeNull();
+
+      // Inactive line stays a plain text node without syllable spans.
+      const nextBtn = screen.getByRole('button', { name: 'Second line' });
+      expect(nextBtn.querySelectorAll('[data-syllable]')).toHaveLength(0);
+      expect(container.querySelector('[data-lyrics-granularity]')).toHaveAttribute('data-lyrics-granularity', 'syllable');
+      expect(screen.getByRole('link', { name: 'lyricsPanel.source' })).toHaveAttribute('href', 'https://lrc.red');
+    });
+
+    it('silently upgrades line lyrics in place once Phase 2 enrichment lands', async () => {
+      vi.useFakeTimers();
+      try {
+        state.playback.currentTime = 1.75;
+        api.getTrackLyrics
+          .mockResolvedValueOnce({
+            status: 'ready',
+            synced: '[00:01.00]Long enough\n[00:05.00]Second line',
+            rich_synced: null,
+            plain: 'Long enough\nSecond line',
+            instrumental: false,
+            cached: false,
+            enriching: true,
+            timing_safe: true,
+            provider: 'lrclib',
+          })
+          .mockResolvedValueOnce({
+            status: 'ready',
+            synced: '[00:01.00]Long enough\n[00:05.00]Second line',
+            rich_synced: RICH,
+            plain: 'Long enough\nSecond line',
+            instrumental: false,
+            cached: true,
+            enriching: false,
+            timing_safe: true,
+            provider: 'lrc.red',
+          });
+
+        const view = render(() => <LyricsPanel />);
+        await vi.advanceTimersByTimeAsync(0);
+        // Line lyrics appear immediately without waiting on Phase 2.
+        const firstBtn = screen.getByRole('button', { name: 'Long enough' });
+        expect(firstBtn.querySelectorAll('[data-syllable]')).toHaveLength(0);
+        expect(screen.queryByRole('link')).not.toBeInTheDocument();
+
+        // After the gentle background poll, rich syllable timing replaces in place.
+        await vi.advanceTimersByTimeAsync(1_250);
+        expect(screen.getByRole('button', { name: 'Long enough' }).querySelectorAll('[data-syllable]')).toHaveLength(3);
+        expect(screen.getByRole('link', { name: 'lyricsPanel.source' })).toHaveAttribute('href', 'https://lrc.red');
+        expect(api.getTrackLyrics).toHaveBeenCalledTimes(2);
+        view.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

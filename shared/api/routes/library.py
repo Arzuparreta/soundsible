@@ -34,6 +34,7 @@ def _lyrics_payload(
     source_kind=None,
     audio_duration=None,
     offset_ms=None,
+    enriching=False,
 ):
     """What a player needs to show lyrics, and whether their timing can be trusted.
 
@@ -49,26 +50,31 @@ def _lyrics_payload(
     flagged, for the listener to line up with a tap. ``offset_ms`` is that
     correction, if one was made.
     """
-    from shared.lyrics import has_text, provider, synced_timing_fits
+    from shared.lyrics import display_provider, has_text, parse_rich_synced, synced_timing_fits
     from shared.music_identity import synced_lyrics_safe
 
     if status is None:
         status = "ready" if has_text(record) else "not_found"
     synced_duration = record.get("synced_duration") if record else None
     vouched = source_kind is None or synced_lyrics_safe(str(source_kind))
-    timing_safe = vouched and synced_timing_fits(audio_duration, synced_duration)
+    rich_synced = parse_rich_synced(record.get("rich_synced")) if record and vouched else None
+    rich_duration = rich_synced.get("dur") if isinstance(rich_synced, dict) else None
+    effective_duration = rich_duration if (rich_synced and rich_duration) else synced_duration
+    timing_safe = vouched and synced_timing_fits(audio_duration, effective_duration)
     return {
         "status": status,
         "synced": record.get("synced") if record and vouched else None,
+        "rich_synced": rich_synced,
         "plain": record.get("plain") if record else None,
         "instrumental": bool(record and record.get("instrumental")),
         "cached": cached,
         "pending": status == "pending",
+        "enriching": bool(enriching) and vouched,
         "timing_safe": timing_safe,
-        "synced_duration": synced_duration,
+        "synced_duration": effective_duration,
         "offset_ms": offset_ms,
         # Who to credit beside the lines; lrc.red's terms ask for a link to it.
-        "provider": provider(record),
+        "provider": display_provider(record, include_rich=vouched),
     }
 
 
@@ -446,11 +452,61 @@ def purge_missing_library_tracks():
     return jsonify({"status": "success", **summary})
 
 
+def _kick_enrichment(db, cache_key, artist, title, album, duration, record, *, persist=True):
+    """Start or poll Phase 2 word/syllable enrichment without blocking playback.
+
+    Returns ``(updated_record, is_enriching)``. When persisted, completion
+    settles the DB row itself so a client that never comes back still benefits
+    on the next play.
+    """
+    from shared.lyrics import poll_enrichment, record_text, settle_enrichment, worth_enriching
+
+    if not worth_enriching(record):
+        return record, False
+    ref_text = record_text(record)
+    if persist and cache_key:
+        def on_done(found):
+            settle_enrichment(db, cache_key, found)
+
+        def needed():
+            return worth_enriching(db.get_lyrics(cache_key))
+
+        status, found = poll_enrichment(
+            artist,
+            title,
+            album,
+            duration,
+            reference_text=ref_text,
+            existing_source=record.get("source"),
+            on_complete=on_done,
+            needed=needed,
+        )
+        if status == "settled":
+            return db.get_lyrics(cache_key) or record, False
+        if status == "complete" and found is not None:
+            settle_enrichment(db, cache_key, found)
+            return db.get_lyrics(cache_key) or {**record, **found}, False
+        return record, status == "pending"
+
+    status, found = poll_enrichment(
+        artist,
+        title,
+        album,
+        duration,
+        reference_text=ref_text,
+        existing_source=record.get("source"),
+    )
+    if status == "complete" and found is not None:
+        return {**record, **found}, False
+    return record, status == "pending"
+
+
 @library_bp.route("/api/library/tracks/<track_id>/lyrics", methods=["GET"])
 @rate_limit("library_lyrics", limit=60, window_sec=60)
 def get_track_lyrics(track_id):
     """Lyrics for a library track: served from the local cache when present,
-    otherwise fetched (LRCLIB, then lrc.red) and cached, not-found results too."""
+    otherwise fetched (LRCLIB, then lrc.red, then NetEase) and cached, with
+    non-blocking Phase 2 syllable/word enrichment."""
     from shared.database import instance_db
     from shared.lyrics import audio_key, poll_lyrics, settle_upgrade, store, worth_looking_up_again
 
@@ -463,13 +519,21 @@ def get_track_lyrics(track_id):
     db = instance_db()
     offset_ms = db.get_lyrics_offset(audio_key(getattr(track, "youtube_id", None), track.id))
 
-    def payload(record, cached=False):
-        return jsonify(_lyrics_payload(record, cached=cached, audio_duration=track.duration, offset_ms=offset_ms))
+    def payload(record, cached=False, enriching=False):
+        return jsonify(_lyrics_payload(
+            record, cached=cached, audio_duration=track.duration, offset_ms=offset_ms, enriching=enriching,
+        ))
+
+    def serve_with_enrichment(record, cached=False):
+        updated, enriching = _kick_enrichment(
+            db, track_id, track.artist, track.title, track.album, track.duration, record, persist=True,
+        )
+        return payload(updated, cached=cached, enriching=enriching)
 
     refresh = request.args.get("refresh") in ("1", "true")
     cached = None if refresh else db.get_lyrics(track_id)
     if cached and not worth_looking_up_again(cached, track.duration):
-        return payload(cached, cached=True)
+        return serve_with_enrichment(cached, cached=True)
 
     # Lyrics an older resolver left without timing that fits are looked up
     # once more. They are served while that runs, and whenever the provider
@@ -489,7 +553,7 @@ def get_track_lyrics(track_id):
         track.artist, track.title, track.album, track.duration, on_complete=settle, needed=needed,
     )
     if lookup_status == "settled":
-        return payload(db.get_lyrics(track_id) or cached, cached=True)
+        return serve_with_enrichment(db.get_lyrics(track_id) or cached, cached=True)
     if lookup_status != "complete":
         if cached:
             return payload(cached, cached=True)
@@ -501,9 +565,9 @@ def get_track_lyrics(track_id):
         return jsonify(_lyrics_payload(status="unavailable"))
     if cached:
         served = settle_upgrade(db, track_id, cached, record)
-        return payload(served, cached=served is not record)
+        return serve_with_enrichment(served, cached=served is not record)
     store(db, track_id, record)
-    return payload(record)
+    return serve_with_enrichment(record, cached=False)
 
 
 @library_bp.route("/api/lyrics", methods=["GET"])
@@ -514,6 +578,7 @@ def get_lyrics_by_metadata():
     metadata; cold provider work runs through the bounded coordinator."""
     from shared.database import instance_db
     from shared.lyrics import audio_key, metadata_cache_key, poll_lyrics, store
+    from shared.music_identity import synced_lyrics_safe
 
     artist = (request.args.get("artist") or "").strip()
     title = (request.args.get("title") or "").strip()
@@ -531,17 +596,32 @@ def get_lyrics_by_metadata():
     refresh = request.args.get("refresh") in ("1", "true")
     db = instance_db()
     offset_ms = db.get_lyrics_offset(audio_key(youtube_id))
+    vouched = source_kind is None or synced_lyrics_safe(str(source_kind))
 
-    def payload(record, cached=False):
+    def payload(record, cached=False, enriching=False):
         return jsonify(_lyrics_payload(
-            record, cached=cached, source_kind=source_kind, audio_duration=duration, offset_ms=offset_ms,
+            record,
+            cached=cached,
+            source_kind=source_kind,
+            audio_duration=duration,
+            offset_ms=offset_ms,
+            enriching=enriching,
         ))
 
     cache_key = metadata_cache_key(artist, title, album, duration)
+
+    def serve_with_enrichment(record, cached=False):
+        if not vouched:
+            return payload(record, cached=cached, enriching=False)
+        updated, enriching = _kick_enrichment(
+            db, cache_key if persist else None, artist, title, album, duration, record, persist=persist,
+        )
+        return payload(updated, cached=cached, enriching=enriching)
+
     if persist and not refresh:
         cached = db.get_lyrics(cache_key)
         if cached:
-            return payload(cached, cached=True)
+            return serve_with_enrichment(cached, cached=True)
 
     lookup_status, record = poll_lyrics(artist, title, album, duration)
     if lookup_status != "complete":
@@ -550,7 +630,7 @@ def get_lyrics_by_metadata():
         return jsonify(_lyrics_payload(status="unavailable"))
     if persist:
         store(db, cache_key, record)
-    return payload(record)
+    return serve_with_enrichment(record, cached=False)
 
 
 #: Further than any intro or coda a cut adds; anything beyond is a typo.

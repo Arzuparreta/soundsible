@@ -8,6 +8,7 @@ export function LyricsPanel(props: { scrollRef?: (element: HTMLDivElement) => vo
   return <LyricsPanelView {...props} playback={{
     currentTrack: () => player().playback.currentTrack ?? null,
     currentTime: () => player().playback.currentTime,
+    isPlaying: () => player().playback.isPlaying,
     inLibrary: track => state.library.some(row => row.id === track.id),
     saved: track => { const keys = new Set(trackKeys(track)); return state.saved.some(entry => entry.keys.some(key => keys.has(key))); },
     seek: seconds => player().actions.seek(seconds),

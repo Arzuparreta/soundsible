@@ -1,7 +1,14 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
 import { api } from '../lib/api';
 import { pageVisible } from '../lib/pageVisibility';
-import { activeLineIndex, parseLrc, timingFits } from '../lib/lrc';
+import {
+  activeLineIndex,
+  parseLrc,
+  richToDisplayLines,
+  segmentFill,
+  timingFits,
+  type DisplayLyricLine,
+} from '../lib/lrc';
 import { lookupLyrics } from '../lib/lyricsLookup';
 import { isPodcastTrack } from '../lib/track';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
@@ -13,11 +20,13 @@ import styles from './LyricsPanel.module.css';
 
 /**
  * Lyrics tab of the Now Playing side panel. Follows whatever is playing:
- * library tracks hit the engine's cached lookup (LRCLIB, then lrc.red);
- * previews (discover / YouTube) are looked up by metadata. Lines from lrc.red
- * end with a link to it, as its terms ask. When synced (LRC) lyrics exist the
- * current line is highlighted and kept centred as the song advances; a tap on
- * any line seeks there. Plain lyrics render as a static scrollable text.
+ * library tracks hit the engine's cached lookup (LRCLIB, then lrc.red / NetEase)
+ * with non-blocking Phase 2 word/syllable enrichment; previews (discover /
+ * YouTube) are looked up by metadata. Lines (or rich timing) from lrc.red end
+ * with a link to it, as its terms ask. When synced lyrics exist the current
+ * line is highlighted (and animated per syllable/word when rich timing is
+ * available) and kept centred as the song advances; a tap on any line seeks
+ * there. Plain lyrics render as a static scrollable text.
  *
  * Timed lines belong to one cut of a song. When the recording playing is
  * another — a music video with an intro, say — following them would run ahead
@@ -28,6 +37,8 @@ import styles from './LyricsPanel.module.css';
 export interface LyricsPlayback {
   currentTrack(): Track | null;
   currentTime(): number;
+  /** Whether playback is actively advancing (drives 60 fps syllable sweep). */
+  isPlaying?(): boolean;
   inLibrary(track: Track): boolean;
   saved(track: Track): boolean;
   seek(seconds: number): void;
@@ -37,6 +48,11 @@ export interface LyricsPlayback {
 
 /** How long a listener takes to tap the line they hear begin. */
 const TAP_REACTION_MS = 250;
+/** Gentle background polls while Phase 2 syllable enrichment runs server-side. */
+const ENRICH_POLL_DELAYS_MS = [1200, 2500, 4500];
+/** Maximum seconds the 60 fps clock may extrapolate past the last media tick. */
+const MAX_CLOCK_EXTRAPOLATION_SEC = 0.6;
+
 export function LyricsPanelView(props: {
   playback: LyricsPlayback;
   scrollRef?: (element: HTMLDivElement) => void;
@@ -61,12 +77,8 @@ export function LyricsPanelView(props: {
     };
   });
 
-  let activeLookup: AbortController | undefined;
-  onCleanup(() => activeLookup?.abort());
-  const [lyrics, { refetch }] = createResource(lyricsKey, async (key): Promise<LyricsResponse> => {
-    activeLookup?.abort();
-    const lookup = new AbortController(); activeLookup = lookup;
-    return lookupLyrics((signal) => key.inLibrary
+  const fetchOnce = (key: NonNullable<ReturnType<typeof lyricsKey>>, signal: AbortSignal) => (
+    key.inLibrary
       ? api.getTrackLyrics(key.id, { signal })
       : api.getLyricsByMetadata({
           artist: key.artist,
@@ -76,32 +88,111 @@ export function LyricsPanelView(props: {
           sourceKind: key.sourceKind ?? undefined,
           youtubeId: key.youtubeId ?? undefined,
           persist: key.saved,
-        }, { signal }), lookup.signal);
+        }, { signal })
+  );
+
+  let activeLookup: AbortController | undefined;
+  onCleanup(() => activeLookup?.abort());
+  const [lyrics, { refetch, mutate }] = createResource(lyricsKey, async (key): Promise<LyricsResponse> => {
+    activeLookup?.abort();
+    const lookup = new AbortController(); activeLookup = lookup;
+    return lookupLyrics((signal) => fetchOnce(key, signal), lookup.signal);
   });
 
   createEffect(() => { if (!lyricsKey()) activeLookup?.abort(); });
 
-  const parsed = createMemo(() => {
+  // Phase 2 background enrichment: when the engine served line/plain lyrics
+  // immediately and started rich syllable/word enrichment, check a few times
+  // quietly and upgrade the rendered lyrics in place without a loading flash.
+  createEffect(() => {
+    const key = lyricsKey();
+    const res = lyrics();
+    if (!key || !res || res.status !== 'ready' || !res.enriching || res.rich_synced) return;
+    const controller = new AbortController();
+    let timer = 0;
+    let attempt = 0;
+    const schedule = () => {
+      if (controller.signal.aborted || attempt >= ENRICH_POLL_DELAYS_MS.length) return;
+      timer = window.setTimeout(async () => {
+        attempt += 1;
+        try {
+          const updated = await fetchOnce(key, controller.signal);
+          if (controller.signal.aborted || lyricsKey() !== key) return;
+          if (updated && updated.status === 'ready') {
+            if (updated.rich_synced || !updated.enriching) {
+              mutate(updated);
+              return;
+            }
+          }
+        } catch {
+          return;
+        }
+        schedule();
+      }, ENRICH_POLL_DELAYS_MS[attempt]);
+    };
+    schedule();
+    onCleanup(() => {
+      window.clearTimeout(timer);
+      controller.abort();
+    });
+  });
+
+  const richLines = createMemo(() => richToDisplayLines(lyrics()?.rich_synced));
+
+  const parsed = createMemo<DisplayLyricLine[]>(() => {
+    const rich = richLines();
+    if (rich.length > 0) return rich;
     const synced = lyrics()?.synced;
-    return synced ? parseLrc(synced) : [];
+    return synced ? parseLrc(synced).map((line) => ({ time: line.time, text: line.text, words: null })) : [];
   });
 
   // ── Timing: follow the lines, or have the listener line them up ──
   const [offsetMs, setOffsetMs] = createSignal<number | null>(null);
   const [adjusting, setAdjusting] = createSignal(false);
-  createEffect(on(() => lyrics(), (res) => {
-    setOffsetMs(res?.offset_ms ?? null);
+  createEffect(on(lyricsKey, () => {
+    setOffsetMs(null);
     setAdjusting(false);
+  }));
+  createEffect(on(() => lyrics()?.offset_ms, (next) => {
+    if (next !== undefined) setOffsetMs(next ?? null);
   }));
   const timingTrusted = createMemo(() => {
     if (offsetMs() !== null) return true;
     const res = lyrics();
     if (!res || res.timing_safe === false) return false;
-    return timingFits(props.playback.mediaDuration?.(), res.synced_duration);
+    return timingFits(props.playback.mediaDuration?.(), res.rich_synced?.dur ?? res.synced_duration);
   });
   const aligning = createMemo(() => parsed().length > 0 && (adjusting() || !timingTrusted()));
   /** Seconds the lines sit later in this recording than their timing says. */
   const shift = () => (offsetMs() ?? 0) / 1000;
+
+  // 60 fps interpolated playback clock, active ONLY while rich syllable/word
+  // lines are visible and actively playing. Zero rAF cost for line-only lyrics,
+  // paused playback, hidden tabs, or reduced motion.
+  const [smoothTime, setSmoothTime] = createSignal(props.playback.currentTime());
+  let anchorPos = props.playback.currentTime();
+  let anchorWall = performance.now();
+  createEffect(() => {
+    anchorPos = props.playback.currentTime();
+    anchorWall = performance.now();
+    setSmoothTime(anchorPos);
+  });
+  createEffect(() => {
+    const active = richLines().length > 0
+      && !aligning()
+      && pageVisible()
+      && (props.playback.isPlaying?.() ?? false)
+      && !prefersReducedMotion();
+    if (!active) return;
+    let raf = 0;
+    const tick = (now: number) => {
+      const elapsed = Math.max(0, Math.min(MAX_CLOCK_EXTRAPOLATION_SEC, (now - anchorWall) / 1000));
+      setSmoothTime(anchorPos + elapsed);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    onCleanup(() => cancelAnimationFrame(raf));
+  });
 
   // Saves go out one after another, so the engine keeps the last one made;
   // only the latest may undo itself, so an older failure cannot bring back a
@@ -136,8 +227,9 @@ export function LyricsPanelView(props: {
   const alignTo = (lineTime: number) =>
     saveOffset(Math.round((props.playback.currentTime() - lineTime) * 1000) - TAP_REACTION_MS);
 
+  const effectiveTime = () => (richLines().length > 0 ? smoothTime() : props.playback.currentTime()) - shift();
   const activeIdx = createMemo<number>((previous) => aligning() ? -1 : pageVisible()
-    ? activeLineIndex(parsed(), props.playback.currentTime() - shift()) : previous ?? -1);
+    ? activeLineIndex(parsed(), effectiveTime()) : previous ?? -1);
 
   // ── Auto-scroll: keep the active line centred, but yield to the user ──
   //
@@ -221,9 +313,10 @@ export function LyricsPanelView(props: {
     holdUntil = Math.max(holdUntil, Date.now() + TOUCH_HOLD_MS);
   };
 
-  // New lyrics (track change, or a lookup landing) start clean: no stale hold,
-  // and the first placement jumps rather than gliding in from the old position.
-  createEffect(on(parsed, () => {
+  // New track starts clean: no stale hold, and the first placement jumps
+  // rather than gliding in from the old position. Phase 2 rich upgrades on
+  // the same track keep `aligned` intact so the view does not jump mid-song.
+  createEffect(on(lyricsKey, () => {
     aligned = false;
     holdUntil = 0;
   }));
@@ -265,7 +358,7 @@ export function LyricsPanelView(props: {
 
   const empty = createMemo(() => {
     const res = lyrics();
-    return !!res && res.status !== 'unavailable' && !res.synced && !res.plain && !res.instrumental;
+    return !!res && res.status !== 'unavailable' && !res.synced && !res.rich_synced && !res.plain && !res.instrumental;
   });
 
   return (
@@ -299,7 +392,10 @@ export function LyricsPanelView(props: {
                       when={parsed().length > 0}
                       fallback={<><pre class={styles.plain}>{lyrics()?.plain ?? ''}</pre>{credit()}</>}
                     >
-                      <div class={styles.synced}>
+                      <div
+                        class={styles.synced}
+                        data-lyrics-granularity={lyrics()?.rich_synced?.granularity ?? 'line'}
+                      >
                         <For each={parsed()}>
                           {(line, i) => {
                             const tap = createResponsiveTap({
@@ -311,20 +407,66 @@ export function LyricsPanelView(props: {
                                 else props.playback.seek(line.time + shift());
                               },
                             });
+                            const isPrimaryActive = () => i() === activeIdx();
+                            const isRichActive = createMemo(() => {
+                              if (!line.words || aligning()) return false;
+                              if (isPrimaryActive()) return true;
+                              if (line.endTime === undefined) return false;
+                              const pos = effectiveTime();
+                              return pos >= line.time && pos < line.endTime;
+                            });
                             return (
                               <button
                                 type="button"
-                                aria-current={i() === activeIdx() ? 'true' : undefined}
+                                aria-current={isPrimaryActive() ? 'true' : undefined}
                                 data-line={i()}
                                 data-pressable
                                 classList={{
                                   [styles.line]: true,
-                                  [styles.lineActive]: i() === activeIdx(),
-                                  [styles.linePast]: i() < activeIdx(),
+                                  [styles.lineBg]: Boolean(line.bg),
+                                  [styles.lineActive]: isPrimaryActive() || isRichActive(),
+                                  [styles.lineRichActive]: isRichActive(),
+                                  [styles.linePast]: !isRichActive() && i() < activeIdx(),
                                 }}
                                 {...tap}
                               >
-                                {line.text || '♪'}
+                                <Show when={isRichActive() && line.words} fallback={line.text || '♪'}>
+                                  {(words) => {
+                                    const reduced = prefersReducedMotion();
+                                    return (
+                                      <For each={words()}>
+                                        {(word) => (
+                                          <>
+                                            <span class={styles.word}>
+                                              <For each={word.segments}>
+                                                {(seg) => {
+                                                  const fill = createMemo(() => segmentFill(seg, effectiveTime() * 1000));
+                                                  const sweeping = () => !reduced && fill() > 0 && fill() < 1;
+                                                  return (
+                                                    <span
+                                                      data-syllable=""
+                                                      classList={{
+                                                        [styles.sylIdle]: fill() <= 0,
+                                                        [styles.sylDone]: fill() >= 1 || (reduced && fill() > 0),
+                                                        [styles.sylSweep]: sweeping(),
+                                                      }}
+                                                      style={sweeping()
+                                                        ? { '--syl-fill': `${(fill() * 100).toFixed(1)}%` }
+                                                        : undefined}
+                                                    >
+                                                      {seg.x}
+                                                    </span>
+                                                  );
+                                                }}
+                                              </For>
+                                            </span>
+                                            {word.trailingSpace ? ' ' : ''}
+                                          </>
+                                        )}
+                                      </For>
+                                    );
+                                  }}
+                                </Show>
                               </button>
                             );
                           }}

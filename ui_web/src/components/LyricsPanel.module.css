@@ -137,6 +137,45 @@
   transform-origin: left center;
 }
 
+.lineBg {
+  font-size: calc(var(--lyrics-line-size, var(--text-title)) * 0.82);
+  font-weight: var(--fw-medium);
+  opacity: 0.88;
+}
+
+/* Rich syllable/word timing: keep unsung syllables dimmed on the active line
+   and sweep sung syllables cleanly across with a soft gradient edge. */
+.lineRichActive {
+  --lyrics-syllable-idle: color-mix(in srgb, var(--ink-primary) 34%, transparent);
+}
+
+.word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.sylIdle {
+  color: var(--lyrics-syllable-idle, var(--ink-tertiary));
+}
+
+.sylDone {
+  color: var(--ink-primary);
+}
+
+.sylSweep {
+  background-image: linear-gradient(
+    90deg,
+    var(--ink-primary) 0%,
+    var(--ink-primary) var(--syl-fill, 0%),
+    var(--lyrics-syllable-idle, var(--ink-tertiary)) calc(var(--syl-fill, 0%) + 8%),
+    var(--lyrics-syllable-idle, var(--ink-tertiary)) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+}
+
 @media (hover: hover) and (pointer: fine) {
 
 .lineActive:hover {

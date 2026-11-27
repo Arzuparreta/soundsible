@@ -112,13 +112,39 @@ export interface RecommendationContext {
   discovery_youtube_id?: string;
 }
 
+export interface RichLyricSegment {
+  /** Start time in milliseconds. */
+  t: number;
+  /** End time in milliseconds. */
+  e: number;
+  /** Segment text (syllable or word; trailing space marks a word boundary). */
+  x: string;
+}
+
+export interface RichLyricLine {
+  t: number;
+  e: number;
+  bg?: boolean;
+  s: RichLyricSegment[];
+}
+
+export interface RichSyncedLyrics {
+  granularity: 'syllable' | 'word';
+  lines: RichLyricLine[];
+  dur?: number | null;
+}
+
 export interface LyricsResponse {
   status: 'pending' | 'ready' | 'not_found' | 'unavailable';
   synced: string | null;
+  /** Optional word/syllable-synced lines from Phase 2 enrichment. */
+  rich_synced?: RichSyncedLyrics | null;
   plain: string | null;
   instrumental: boolean;
   cached: boolean;
   pending?: boolean;
+  /** Phase 2 background enrichment is in flight; the panel may poll once or twice. */
+  enriching?: boolean;
   /** The timed lines can be followed as they are: the upload's timeline is the
    * album's, and the recording is as long as the one they were timed for. */
   timing_safe?: boolean;
@@ -126,8 +152,8 @@ export interface LyricsResponse {
   synced_duration?: number | null;
   /** A listener's correction: the lines sit this much later in this audio. */
   offset_ms?: number | null;
-  /** Who supplied the lines; lrc.red's terms ask for a credit linking to it. */
-  provider?: 'lrclib' | 'lrc.red' | null;
+  /** Who supplied the rendered lines; lrc.red's terms ask for a credit linking to it. */
+  provider?: 'lrclib' | 'lrc.red' | 'netease' | null;
 }
 
 export interface SearchResult {

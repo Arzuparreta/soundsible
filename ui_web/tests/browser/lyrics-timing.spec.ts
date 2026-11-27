@@ -120,3 +120,60 @@ test('lines from LRCLIB carry no credit link', async ({ page }) => {
   const panel = await showLyrics(page);
   await expect(panel.getByRole('link')).toHaveCount(0);
 });
+
+test('syllable-enriched lyrics render per-syllable spans and upgrade seamlessly from Phase 2', async ({ page }) => {
+  const rich = {
+    granularity: 'syllable',
+    dur: 180,
+    lines: [
+      {
+        t: 0,
+        e: 3000,
+        s: [
+          { t: 0, e: 1000, x: 'Line ' },
+          { t: 1000, e: 2000, x: 'O' },
+          { t: 2000, e: 3000, x: 'ne' },
+        ],
+      },
+      {
+        t: 4000,
+        e: 6000,
+        s: [
+          { t: 4000, e: 5000, x: 'Line ' },
+          { t: 5000, e: 6000, x: 'Two' },
+        ],
+      },
+    ],
+  };
+
+  let calls = 0;
+  await page.route('**/api/library/tracks/*/lyrics**', (route) => {
+    calls += 1;
+    const upgraded = calls >= 2;
+    return route.fulfill({ json: {
+      status: 'ready',
+      synced: '[00:00.00]Line One\n[00:04.00]Line Two',
+      rich_synced: upgraded ? rich : null,
+      plain: 'Line One\nLine Two',
+      instrumental: false,
+      cached: upgraded,
+      enriching: !upgraded,
+      timing_safe: true,
+      synced_duration: 180,
+      offset_ms: null,
+      provider: upgraded ? 'lrc.red' : 'lrclib',
+    } });
+  });
+
+  await openMusicPlayer(page);
+  const surface = page.locator('[data-player-surface-open]');
+  await showPlayerPanel(page, 'stage');
+  await surface.locator('button[data-compact-lyrics-toggle]:visible, button[aria-label="Mostrar letra"]:visible').first().click();
+  const panel = surface.locator('[data-lyrics-scroll]').first();
+
+  await expect(panel.getByRole('button', { name: 'Line One', exact: true })).toBeInViewport();
+  // Phase 2 background poll upgrades to syllable granularity in place and adds lrc.red credit.
+  await expect(panel.locator('[data-lyrics-granularity="syllable"]')).toBeVisible({ timeout: 5000 });
+  await expect(panel.getByRole('button', { name: 'Line One', exact: true }).locator('[data-syllable]')).toHaveCount(3);
+  await expect(panel.getByRole('link', { name: 'Letra vía lrc.red' })).toHaveAttribute('href', 'https://lrc.red');
+});
