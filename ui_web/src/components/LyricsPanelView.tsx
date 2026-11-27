@@ -431,41 +431,41 @@ export function LyricsPanelView(props: {
                                 {...tap}
                               >
                                 <Show when={isRichActive() && line.words} fallback={line.text || '♪'}>
-                                  {(words) => (
-                                    <For each={words()}>
-                                      {(word) => (
-                                        <>
-                                          <span class={styles.word}>
-                                            <For each={word.segments}>
-                                              {(seg) => {
-                                                const fill = () => segmentFill(seg, effectiveTime() * 1000);
-                                                const sweeping = () => {
-                                                  const f = fill();
-                                                  return f > 0 && f < 1 && !prefersReducedMotion();
-                                                };
-                                                return (
-                                                  <span
-                                                    data-syllable=""
-                                                    classList={{
-                                                      [styles.sylIdle]: fill() <= 0,
-                                                      [styles.sylDone]: fill() >= 1 || (fill() > 0 && prefersReducedMotion()),
-                                                      [styles.sylSweep]: sweeping(),
-                                                    }}
-                                                    style={sweeping()
-                                                      ? { '--syl-fill': `${(fill() * 100).toFixed(1)}%` }
-                                                      : undefined}
-                                                  >
-                                                    {seg.x}
-                                                  </span>
-                                                );
-                                              }}
-                                            </For>
-                                          </span>
-                                          {word.trailingSpace ? ' ' : ''}
-                                        </>
-                                      )}
-                                    </For>
-                                  )}
+                                  {(words) => {
+                                    const reduced = prefersReducedMotion();
+                                    return (
+                                      <For each={words()}>
+                                        {(word) => (
+                                          <>
+                                            <span class={styles.word}>
+                                              <For each={word.segments}>
+                                                {(seg) => {
+                                                  const fill = createMemo(() => segmentFill(seg, effectiveTime() * 1000));
+                                                  const sweeping = () => !reduced && fill() > 0 && fill() < 1;
+                                                  return (
+                                                    <span
+                                                      data-syllable=""
+                                                      classList={{
+                                                        [styles.sylIdle]: fill() <= 0,
+                                                        [styles.sylDone]: fill() >= 1 || (reduced && fill() > 0),
+                                                        [styles.sylSweep]: sweeping(),
+                                                      }}
+                                                      style={sweeping()
+                                                        ? { '--syl-fill': `${(fill() * 100).toFixed(1)}%` }
+                                                        : undefined}
+                                                    >
+                                                      {seg.x}
+                                                    </span>
+                                                  );
+                                                }}
+                                              </For>
+                                            </span>
+                                            {word.trailingSpace ? ' ' : ''}
+                                          </>
+                                        )}
+                                      </For>
+                                    );
+                                  }}
                                 </Show>
                               </button>
                             );

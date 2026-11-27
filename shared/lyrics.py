@@ -26,7 +26,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import math
 import random
 import re
 import threading
@@ -41,6 +40,14 @@ from typing import Any, Callable, Dict, Optional
 
 import requests
 
+from shared.lyrics_formats import (
+    parse_lrc,
+    parse_lyricsplus,
+    parse_rich_synced,
+    parse_ttml,
+    parse_yrc,
+    strip_netease_lrc_credits,
+)
 from shared.music_identity import canonical_music_identity
 
 logger = logging.getLogger(__name__)
@@ -108,12 +115,6 @@ _LOOKUP_WORKERS = 2
 _ENRICH_WORKERS = 2
 
 _SPACE_RE = re.compile(r"\s+")
-_ALNUM_RE = re.compile(r"[\w]", re.UNICODE)
-_NETEASE_CREDIT_RE = re.compile(
-    r"^\s*(作词|作曲|编曲|制作人|混音|母带|录音|吉他|贝斯|鼓|键盘|和声|词|曲|监制|出品|统筹|策划|宣传|发行)\s*[:：]"
-)
-_YRC_LINE_RE = re.compile(r"^\[(\d+),(\d+)\](.*)$")
-_YRC_SEG_RE = re.compile(r"\((\d+),(\d+),\d+\)([^(]*)")
 _VERSION_TOKENS = {
     "acoustic",
     "acustico",
@@ -272,24 +273,6 @@ def has_text(record: Optional[Dict[str, Any]]) -> bool:
     return bool(
         record and (record.get("synced") or record.get("plain") or record.get("instrumental") or record.get("rich_synced"))
     )
-
-
-def parse_rich_synced(value: Any) -> Optional[Dict[str, Any]]:
-    """Decode a stored ``rich_synced`` JSON string or pass through a valid dict."""
-    if not value:
-        return None
-    if isinstance(value, dict):
-        data = value
-    elif isinstance(value, str):
-        try:
-            data = json.loads(value)
-        except (ValueError, TypeError):
-            return None
-    else:
-        return None
-    if not isinstance(data, dict) or not isinstance(data.get("lines"), list) or not data["lines"]:
-        return None
-    return data
 
 
 def provider(record: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -677,358 +660,40 @@ def _lyricsplus_get(params: Dict[str, Any], timeout_sec: float) -> Optional[requ
     )
 
 
-def _lrc_red_hit(hits: Any, artist: str, title: str, duration: Optional[int]) -> Optional[Dict[str, Any]]:
-    """The search hit that is this song, recorded at this length.
+def _screen_hit(
+    artist: str,
+    title: str,
+    duration: Optional[int],
+    cand_artist: Any,
+    cand_title: Any,
+    cand_duration: Any,
+) -> Optional[float]:
+    """Return combined title+artist similarity if a candidate passes identity
+    and duration screening, or ``None``."""
+    title_score = _similarity(title, cand_title)
+    if title_score < _LRC_RED_MIN_TITLE:
+        return None
+    artist_names = cand_artist if isinstance(cand_artist, list) else [cand_artist]
+    artist_score = max((_similarity(artist, name) for name in artist_names if name), default=0.0)
+    if (
+        artist_score < _LRC_RED_MIN_ARTIST
+        or _version_tokens(title) != _version_tokens(cand_title)
+        or not synced_timing_fits(duration, cand_duration)
+    ):
+        return None
+    return title_score + artist_score
 
-    Both hand-timed and AI-aligned (``byModel``) hits are accepted; manual hits
-    rank strictly ahead of ``byModel`` hits when both match the recording.
-    """
+
+def _lrc_red_hit(hits: Any, artist: str, title: str, duration: Optional[int]) -> Optional[Dict[str, Any]]:
+    """Best matching lrc.red search hit; manual timing ranks ahead of ``byModel``."""
     ranked: list[tuple[bool, float, Dict[str, Any]]] = []
     for hit in hits if isinstance(hits, list) else []:
         if not isinstance(hit, dict) or not _ISRC_RE.match(str(hit.get("isrc") or "")):
             continue
-        title_score = _similarity(title, hit.get("title"))
-        artist_score = _similarity(artist, hit.get("artist"))
-        if (
-            title_score < _LRC_RED_MIN_TITLE
-            or artist_score < _LRC_RED_MIN_ARTIST
-            or _version_tokens(title) != _version_tokens(hit.get("title"))
-            or not synced_timing_fits(duration, hit.get("duration"))
-        ):
-            continue
-        ranked.append((not bool(hit.get("byModel")), title_score + artist_score, hit))
+        score = _screen_hit(artist, title, duration, hit.get("artist"), hit.get("title"), hit.get("duration"))
+        if score is not None:
+            ranked.append((not bool(hit.get("byModel")), score, hit))
     return max(ranked, key=lambda row: (row[0], row[1]))[2] if ranked else None
-
-
-_WORD_STAMP = re.compile(r"<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>")
-
-
-def _line_lrc(text: str) -> list[str]:
-    """Enhanced LRC as plain line LRC: the timed lines, without word stamps."""
-    lines = []
-    for raw in str(text or "").splitlines():
-        stamps = list(_LRC_TIMESTAMP.finditer(raw))
-        if not stamps or stamps[0].start() != 0:
-            continue
-        head = raw[: stamps[-1].end()]
-        words = _SPACE_RE.sub(" ", _WORD_STAMP.sub("", raw[stamps[-1].end():])).strip()
-        lines.append(f"{head}{words}")
-    return lines
-
-
-def _stamp_ms(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    if text.endswith("ms"):
-        sec = float(text[:-2]) / 1000.0
-    else:
-        if text.endswith("s"):
-            text = text[:-1]
-        parts = text.split(":")
-        if len(parts) > 3:
-            raise ValueError("Unsupported timestamp")
-        sec = sum(float(part) * (60 ** power) for power, part in enumerate(reversed(parts)))
-    if not math.isfinite(sec) or sec < 0:
-        raise ValueError("Invalid timestamp")
-    return int(round(sec * 1000))
-
-
-def _format_lrc_stamp(ms: int) -> str:
-    total_cs = max(0, int(round(ms / 10.0)))
-    minutes, rem = divmod(total_cs, 6000)
-    seconds, centis = divmod(rem, 100)
-    return f"[{minutes:02d}:{seconds:02d}.{centis:02d}]"
-
-
-def _has_alnum(text: str) -> bool:
-    return bool(_ALNUM_RE.search(text or ""))
-
-
-def _classify_segments(lines: list[Dict[str, Any]]) -> str:
-    """Return ``"syllable"``, ``"word"``, or ``"line"`` from structured lines."""
-    word_segments = 0
-    syllable_splits = 0
-    for line in lines:
-        segs = line.get("s") or []
-        unique_times = {(seg["t"], seg["e"]) for seg in segs}
-        if len(unique_times) >= 2:
-            word_segments += len(segs)
-            for idx in range(len(segs) - 1):
-                t1 = segs[idx]["x"]
-                t2 = segs[idx + 1]["x"]
-                if (
-                    t1
-                    and t2
-                    and not t1[-1].isspace()
-                    and not t2[0].isspace()
-                    and _has_alnum(t1)
-                    and _has_alnum(t2)
-                ):
-                    syllable_splits += 1
-    if syllable_splits >= 2:
-        return "syllable"
-    if word_segments > 0:
-        return "word"
-    return "line"
-
-
-def _parse_ttml(body: str, duration: Optional[int] = None) -> tuple[Optional[str], Optional[str], Optional[Dict[str, Any]]]:
-    """Parse TTML into ``(line_lrc, plain_text, rich_synced_or_none)``.
-
-    Preserves syllable splits (adjacent timed ``<span>`` tags with no intervening
-    whitespace) and separates ``ttm:role="x-bg"`` background vocals into their
-    own lines while skipping translations and romanizations.
-    """
-    raw = str(body or "")
-    if not raw.strip():
-        return None, None, None
-    upper = raw.upper()
-    if "<!DOCTYPE" in upper or "<!ENTITY" in upper:
-        raise ValueError("Unsafe XML declaration")
-    root = ET.fromstring(raw)
-
-    lrc_lines: list[str] = []
-    plain_lines: list[str] = []
-    rich_lines: list[Dict[str, Any]] = []
-
-    def collect_spans(parent: ET.Element, target: list[tuple[int, int, str, str]], bg_targets: list[list[tuple[int, int, str, str]]]) -> None:
-        for child in parent:
-            tag = child.tag.rsplit("}", 1)[-1]
-            if tag != "span":
-                continue
-            role = next((v for k, v in child.attrib.items() if k.endswith("role")), None)
-            if role in {"x-translation", "x-roman"}:
-                continue
-            if role == "x-bg":
-                bg_spans: list[tuple[int, int, str, str]] = []
-                collect_spans(child, bg_spans, [])
-                if bg_spans:
-                    bg_targets.append(bg_spans)
-                else:
-                    b_bg = _stamp_ms(child.get("begin"))
-                    e_bg = _stamp_ms(child.get("end"))
-                    txt_bg = _SPACE_RE.sub(" ", "".join(child.itertext())).strip()
-                    if b_bg is not None and txt_bg:
-                        bg_targets.append([(b_bg, e_bg if (e_bg is not None and e_bg > b_bg) else b_bg + 2000, txt_bg, "")])
-                continue
-            b_ms = _stamp_ms(child.get("begin"))
-            e_ms = _stamp_ms(child.get("end"))
-            if b_ms is not None and e_ms is not None:
-                txt = "".join(child.itertext())
-                if txt.strip():
-                    target.append((b_ms, max(e_ms, b_ms), txt, child.tail or ""))
-            else:
-                collect_spans(child, target, bg_targets)
-
-    def spans_to_segments(spans: list[tuple[int, int, str, str]]) -> list[Dict[str, Any]]:
-        segs: list[Dict[str, Any]] = []
-        for idx, (b_ms, e_ms, txt, tail) in enumerate(spans):
-            has_gap = bool(tail and tail.strip() == "") or (tail != "" and tail[:1].isspace())
-            clean = _SPACE_RE.sub(" ", txt)
-            if idx == 0:
-                clean = clean.lstrip()
-            if idx < len(spans) - 1 and has_gap and not clean.endswith(" "):
-                clean += " "
-            elif idx == len(spans) - 1:
-                clean = clean.rstrip()
-            if clean:
-                segs.append({"t": b_ms, "e": max(e_ms, b_ms), "x": clean})
-        return segs
-
-    for element in root.iter():
-        if element.tag.rsplit("}", 1)[-1] != "p":
-            continue
-        p_begin = _stamp_ms(element.get("begin"))
-        p_end = _stamp_ms(element.get("end"))
-        main_spans: list[tuple[int, int, str, str]] = []
-        bg_groups: list[list[tuple[int, int, str, str]]] = []
-        collect_spans(element, main_spans, bg_groups)
-
-        if main_spans:
-            segs = spans_to_segments(main_spans)
-            line_text = _SPACE_RE.sub(" ", "".join(seg["x"] for seg in segs)).strip()
-            line_start = p_begin if p_begin is not None else segs[0]["t"]
-            line_end = p_end if (p_end is not None and p_end >= line_start) else max(seg["e"] for seg in segs)
-            if line_text:
-                lrc_lines.append(f"{_format_lrc_stamp(line_start)}{line_text}")
-                plain_lines.append(line_text)
-                rich_lines.append({"t": line_start, "e": max(line_end, line_start), "s": segs})
-        else:
-            # Line-only <p> (skip x-translation/x-roman text if nested).
-            parts: list[str] = []
-            if element.text:
-                parts.append(element.text)
-            for child in element:
-                role = next((v for k, v in child.attrib.items() if k.endswith("role")), None)
-                if role not in {"x-translation", "x-roman", "x-bg"}:
-                    parts.append("".join(child.itertext()))
-                if child.tail:
-                    parts.append(child.tail)
-            line_text = _SPACE_RE.sub(" ", "".join(parts)).strip()
-            if p_begin is not None and line_text:
-                line_end = p_end if (p_end is not None and p_end >= p_begin) else p_begin + 3000
-                lrc_lines.append(f"{_format_lrc_stamp(p_begin)}{line_text}")
-                plain_lines.append(line_text)
-                rich_lines.append({"t": p_begin, "e": line_end, "s": [{"t": p_begin, "e": line_end, "x": line_text}]})
-            elif line_text:
-                plain_lines.append(line_text)
-
-        for bg_spans in bg_groups:
-            bg_segs = spans_to_segments(bg_spans)
-            bg_text = _SPACE_RE.sub(" ", "".join(seg["x"] for seg in bg_segs)).strip()
-            if bg_segs and bg_text:
-                rich_lines.append({
-                    "t": bg_segs[0]["t"],
-                    "e": max(seg["e"] for seg in bg_segs),
-                    "bg": True,
-                    "s": bg_segs,
-                })
-
-    if not lrc_lines:
-        return None, ("\n".join(plain_lines) or None), None
-
-    rich_lines.sort(key=lambda item: (item["t"], 1 if item.get("bg") else 0))
-    granularity = _classify_segments(rich_lines)
-    rich_synced: Optional[Dict[str, Any]] = None
-    if granularity in {"syllable", "word"}:
-        rich_synced = {"granularity": granularity, "lines": rich_lines}
-        if duration:
-            rich_synced["dur"] = int(duration)
-    return "\n".join(lrc_lines), ("\n".join(plain_lines) or None), rich_synced
-
-
-def _parse_yrc(body: str, duration: Optional[int] = None) -> tuple[Optional[str], Optional[str], Optional[Dict[str, Any]]]:
-    """Parse NetEase YRC into ``(line_lrc, plain_text, rich_synced_or_none)``."""
-    lrc_lines: list[str] = []
-    plain_lines: list[str] = []
-    rich_lines: list[Dict[str, Any]] = []
-
-    for raw in str(body or "").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("{"):
-            continue
-        match = _YRC_LINE_RE.match(line)
-        if not match:
-            continue
-        line_start = int(match.group(1))
-        line_dur = int(match.group(2))
-        segs_raw = list(_YRC_SEG_RE.finditer(match.group(3)))
-        if not segs_raw:
-            continue
-        plain_line = _SPACE_RE.sub(" ", "".join(m.group(3) for m in segs_raw)).strip()
-        if not plain_line or _NETEASE_CREDIT_RE.match(plain_line):
-            continue
-        segs: list[Dict[str, Any]] = []
-        for idx, seg_m in enumerate(segs_raw):
-            seg_start = int(seg_m.group(1))
-            seg_dur = int(seg_m.group(2))
-            seg_text = seg_m.group(3)
-            if not seg_text:
-                continue
-            if idx == 0:
-                seg_text = seg_text.lstrip()
-            if idx == len(segs_raw) - 1:
-                seg_text = seg_text.rstrip()
-            if seg_text:
-                segs.append({"t": seg_start, "e": seg_start + max(seg_dur, 0), "x": seg_text})
-        if not segs:
-            continue
-        lrc_lines.append(f"{_format_lrc_stamp(line_start)}{plain_line}")
-        plain_lines.append(plain_line)
-        rich_lines.append({
-            "t": line_start,
-            "e": max(line_start + line_dur, segs[-1]["e"]),
-            "s": segs,
-        })
-
-    if not lrc_lines:
-        return None, None, None
-
-    rich_lines.sort(key=lambda item: item["t"])
-    granularity = _classify_segments(rich_lines)
-    rich_synced: Optional[Dict[str, Any]] = None
-    if granularity in {"syllable", "word"}:
-        rich_synced = {"granularity": granularity, "lines": rich_lines}
-        if duration:
-            rich_synced["dur"] = int(duration)
-    return "\n".join(lrc_lines), ("\n".join(plain_lines) or None), rich_synced
-
-
-def _parse_lyricsplus(payload: Any) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
-    """Parse LyricsPlus JSON into ``(plain_text, rich_synced_or_none)``."""
-    if not isinstance(payload, dict):
-        return None, None
-    raw_lines = payload.get("lyrics")
-    if not isinstance(raw_lines, list) or not raw_lines:
-        return None, None
-
-    plain_lines: list[str] = []
-    rich_lines: list[Dict[str, Any]] = []
-    for entry in raw_lines:
-        if not isinstance(entry, dict):
-            continue
-        line_text = _SPACE_RE.sub(" ", str(entry.get("text") or "")).strip()
-        if not line_text:
-            continue
-        t_ms = entry.get("time")
-        dur_ms = entry.get("duration")
-        if not isinstance(t_ms, (int, float)) or t_ms < 0:
-            continue
-        line_start = int(round(t_ms))
-        line_end = line_start + int(round(dur_ms)) if isinstance(dur_ms, (int, float)) and dur_ms > 0 else line_start + 3000
-        plain_lines.append(line_text)
-        raw_syls = [s for s in (entry.get("syllabus") or []) if isinstance(s, dict) and s.get("text")]
-        segs: list[Dict[str, Any]] = []
-        for idx, syl in enumerate(raw_syls):
-            st = syl.get("time")
-            sd = syl.get("duration")
-            sx = str(syl.get("text") or "")
-            if not isinstance(st, (int, float)) or st < 0 or not sx:
-                continue
-            if idx == 0:
-                sx = sx.lstrip()
-            if idx == len(raw_syls) - 1:
-                sx = sx.rstrip()
-            if sx:
-                s_start = int(round(st))
-                s_end = s_start + (int(round(sd)) if isinstance(sd, (int, float)) and sd > 0 else 0)
-                segs.append({"t": s_start, "e": max(s_end, s_start), "x": sx})
-        if not segs:
-            segs = [{"t": line_start, "e": line_end, "x": line_text}]
-        bg = bool((entry.get("element") or {}).get("isBackground")) if isinstance(entry.get("element"), dict) else False
-        item: Dict[str, Any] = {
-            "t": line_start,
-            "e": max(line_end, segs[-1]["e"]),
-            "s": segs,
-        }
-        if bg:
-            item["bg"] = True
-        rich_lines.append(item)
-
-    if len(rich_lines) < 2:
-        return None, None
-
-    granularity = _classify_segments(rich_lines)
-    if granularity not in {"syllable", "word"}:
-        return "\n".join(plain_lines), None
-
-    meta = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
-    total_dur: Optional[int] = None
-    if meta.get("totalDuration"):
-        try:
-            ms = _stamp_ms(meta["totalDuration"])
-            if ms and ms > 0:
-                total_dur = int(round(ms / 1000.0))
-        except ValueError:
-            total_dur = None
-
-    rich_synced: Dict[str, Any] = {"granularity": granularity, "lines": rich_lines}
-    if total_dur:
-        rich_synced["dur"] = total_dur
-    return "\n".join(plain_lines), rich_synced
 
 
 def _lrc_red_lookup(
@@ -1040,11 +705,7 @@ def _lrc_red_lookup(
     require_rich: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """lrc.red's timed lines (and optional syllable/word TTML) for this recording."""
-    found = _lrc_red_get(
-        "/search.json",
-        {"q": f"{title} {artist}"},
-        _remaining(deadline, _LRC_RED_TIMEOUT_SEC),
-    )
+    found = _lrc_red_get("/search.json", {"q": f"{title} {artist}"}, _remaining(deadline, _LRC_RED_TIMEOUT_SEC))
     payload = found.json() if found is not None else None
     hit = _lrc_red_hit(payload.get("hits") if isinstance(payload, dict) else None, artist, title, duration)
     if not hit or deadline - time.monotonic() < 0.2:
@@ -1056,16 +717,10 @@ def _lrc_red_lookup(
         length = int(round(float(hit.get("duration")))) or None
     except (TypeError, ValueError):
         length = None
-    synced, plain, rich_synced = _parse_ttml(body.text, duration=length)
-    if not synced:
+    synced, plain, rich_synced = parse_ttml(body.text, duration=length)
+    if not synced or (require_rich and rich_synced is None):
         return None
-    if require_rich and rich_synced is None:
-        return None
-    rich_source = (
-        (RICH_LRC_RED_AI_SOURCE if hit.get("byModel") else RICH_LRC_RED_SOURCE)
-        if rich_synced is not None
-        else None
-    )
+    rich_source = (RICH_LRC_RED_AI_SOURCE if hit.get("byModel") else RICH_LRC_RED_SOURCE) if rich_synced else None
     record = {
         "synced": synced,
         "plain": plain,
@@ -1076,37 +731,6 @@ def _lrc_red_lookup(
         "rich_source": rich_source,
     }
     return record if timing_fits(record, duration) else None
-
-
-def _netease_hit(songs: Any, artist: str, title: str, duration: Optional[int]) -> Optional[tuple[Dict[str, Any], Optional[int]]]:
-    ranked: list[tuple[float, Dict[str, Any], Optional[int]]] = []
-    for song in songs if isinstance(songs, list) else []:
-        if not isinstance(song, dict) or not song.get("id"):
-            continue
-        cand_title = str(song.get("name") or "")
-        artist_names = [str(a.get("name") or "") for a in (song.get("artists") or []) if isinstance(a, dict)]
-        artist_score = max(
-            (_similarity(artist, cand) for cand in ([", ".join(artist_names)] + artist_names) if cand),
-            default=0.0,
-        )
-        title_score = _similarity(title, cand_title)
-        try:
-            dur_ms = float(song.get("duration") or 0)
-            dur_sec = int(round(dur_ms / 1000.0)) if dur_ms > 0 else None
-        except (TypeError, ValueError):
-            dur_sec = None
-        if (
-            title_score < _LRC_RED_MIN_TITLE
-            or artist_score < _LRC_RED_MIN_ARTIST
-            or _version_tokens(title) != _version_tokens(cand_title)
-            or not synced_timing_fits(duration, dur_sec)
-        ):
-            continue
-        ranked.append((title_score + artist_score, song, dur_sec))
-    if not ranked:
-        return None
-    _, best, dur_sec = max(ranked, key=lambda row: row[0])
-    return best, dur_sec
 
 
 def _netease_lookup(
@@ -1123,30 +747,36 @@ def _netease_lookup(
         {"s": f"{title} {artist}", "type": 1, "limit": 5},
         _remaining(deadline, _NETEASE_TIMEOUT_SEC),
     )
-    if search is None:
+    data = search.json() if search is not None else None
+    songs = (data.get("result") or {}).get("songs") if isinstance(data, dict) and data.get("code") == 200 and isinstance(data.get("result"), dict) else None
+    ranked: list[tuple[float, Dict[str, Any], Optional[int]]] = []
+    for song in songs if isinstance(songs, list) else []:
+        if not isinstance(song, dict) or not song.get("id"):
+            continue
+        names = [str(a.get("name") or "") for a in (song.get("artists") or []) if isinstance(a, dict)]
+        try:
+            dur_ms = float(song.get("duration") or 0)
+            dur_sec = int(round(dur_ms / 1000.0)) if dur_ms > 0 else None
+        except (TypeError, ValueError):
+            dur_sec = None
+        score = _screen_hit(artist, title, duration, [", ".join(names)] + names, song.get("name"), dur_sec)
+        if score is not None:
+            ranked.append((score, song, dur_sec))
+    if not ranked or deadline - time.monotonic() < 0.2:
         return None
-    data = search.json()
-    if not isinstance(data, dict) or data.get("code") != 200:
-        return None
-    songs = (data.get("result") or {}).get("songs") if isinstance(data.get("result"), dict) else None
-    matched = _netease_hit(songs, artist, title, duration)
-    if not matched or deadline - time.monotonic() < 0.2:
-        return None
-    song, dur_sec = matched
+    _, song, dur_sec = max(ranked, key=lambda row: row[0])
     lyric_resp = _netease_get(
         "/api/song/lyric",
         {"id": song["id"], "lv": 1, "yv": 1, "tv": 0},
         _remaining(deadline, _NETEASE_TIMEOUT_SEC),
     )
-    if lyric_resp is None:
-        return None
-    lyric_data = lyric_resp.json()
+    lyric_data = lyric_resp.json() if lyric_resp is not None else None
     if not isinstance(lyric_data, dict) or lyric_data.get("code") != 200 or lyric_data.get("nolyric"):
         return None
 
     yrc_text = ((lyric_data.get("yrc") or {}).get("lyric") or "") if isinstance(lyric_data.get("yrc"), dict) else ""
     if yrc_text.strip():
-        synced, plain, rich_synced = _parse_yrc(yrc_text, duration=dur_sec)
+        synced, plain, rich_synced = parse_yrc(yrc_text, duration=dur_sec)
         if synced and (rich_synced is not None or not require_rich):
             record = {
                 "synced": synced,
@@ -1163,22 +793,9 @@ def _netease_lookup(
     if require_rich:
         return None
 
-    lrc_text = ((lyric_data.get("lrc") or {}).get("lyric") or "") if isinstance(lyric_data.get("lrc"), dict) else ""
-    if not lrc_text.strip():
-        return None
-    filtered_lines = []
-    for raw in lrc_text.splitlines():
-        stamps = list(_LRC_TIMESTAMP.finditer(raw))
-        if not stamps:
-            continue
-        content = raw[stamps[-1].end():].strip()
-        if not content or _NETEASE_CREDIT_RE.match(content):
-            continue
-        filtered_lines.append(raw)
-    if not filtered_lines:
-        return None
-    synced_lrc = "\n".join(filtered_lines)
-    stamps = parse_lrc(synced_lrc)
+    lrc_raw = ((lyric_data.get("lrc") or {}).get("lyric") or "") if isinstance(lyric_data.get("lrc"), dict) else ""
+    synced_lrc = strip_netease_lrc_credits(lrc_raw)
+    stamps = parse_lrc(synced_lrc) if synced_lrc else []
     if not stamps:
         return None
     record = {
@@ -1213,17 +830,12 @@ def _lyricsplus_lookup(
     resp = _lyricsplus_get(params, _remaining(deadline, _LYRICSPLUS_TIMEOUT_SEC))
     if resp is None:
         return None
-    plain, rich_synced = _parse_lyricsplus(resp.json())
-    if not plain or rich_synced is None:
-        return None
-    if not rich_timing_fits(rich_synced, duration):
+    plain, rich_synced = parse_lyricsplus(resp.json())
+    if not plain or rich_synced is None or not rich_timing_fits(rich_synced, duration):
         return None
     if _text_jaccard(plain, reference_text) < _LYRICSPLUS_MIN_JACCARD:
         return None
-    return {
-        "rich_synced": rich_synced,
-        "rich_source": RICH_LYRICSPLUS_SOURCE,
-    }
+    return {"rich_synced": rich_synced, "rich_source": RICH_LYRICSPLUS_SOURCE}
 
 
 def fetch_lyrics(
@@ -1244,41 +856,26 @@ def fetch_lyrics(
 
     deadline = time.monotonic() + _TOTAL_BUDGET_SEC
     clean_artist, clean_title = _canonical_metadata(artist, title)
-    record: Optional[Dict[str, Any]]
+    record: Optional[Dict[str, Any]] = None
     try:
         record = _lrclib_lookup(clean_artist, clean_title, album, duration, deadline)
-    except requests.RequestException as exc:
-        logger.warning("Lyrics provider request failed for %s - %s: %s", artist, title, exc)
-        record = None
-    except (ValueError, KeyError, TypeError) as exc:
-        logger.warning("Lyrics response parse error for %s - %s: %s", artist, title, exc)
-        record = None
+    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+        logger.warning("Lyrics provider failed for %s - %s: %s", artist, title, exc)
     if timing_fits(record, duration) or deadline - time.monotonic() < _MIN_FALLBACK_BUDGET_SEC:
         return record
 
-    # LRCLIB's lines stay the answer unless lrc.red has timed lines that fit;
-    # when LRCLIB could not be reached, lrc.red's are better than an outage.
-    try:
-        lrc_red_record = _lrc_red_lookup(clean_artist, clean_title, duration, deadline)
-        if lrc_red_record is not None:
-            return lrc_red_record
-    except requests.RequestException as exc:
-        logger.warning("lrc.red request failed for %s - %s: %s", artist, title, exc)
-    except (ValueError, KeyError, TypeError, ET.ParseError) as exc:
-        logger.warning("lrc.red response parse error for %s - %s: %s", artist, title, exc)
-
-    if deadline - time.monotonic() < _MIN_NETEASE_FALLBACK_BUDGET_SEC:
-        return record
-
-    # Third fallback when both LRCLIB and lrc.red lacked fitting timed lines.
-    try:
-        netease_record = _netease_lookup(clean_artist, clean_title, duration, deadline)
-        if netease_record is not None:
-            return netease_record
-    except requests.RequestException as exc:
-        logger.warning("NetEase request failed for %s - %s: %s", artist, title, exc)
-    except (ValueError, KeyError, TypeError) as exc:
-        logger.warning("NetEase response parse error for %s - %s: %s", artist, title, exc)
+    for name, min_budget, fn in (
+        ("lrc.red", _MIN_FALLBACK_BUDGET_SEC, _lrc_red_lookup),
+        ("NetEase", _MIN_NETEASE_FALLBACK_BUDGET_SEC, _netease_lookup),
+    ):
+        if deadline - time.monotonic() < min_budget:
+            break
+        try:
+            hit = fn(clean_artist, clean_title, duration, deadline)
+            if hit is not None:
+                return hit
+        except (requests.RequestException, ValueError, KeyError, TypeError, ET.ParseError) as exc:
+            logger.warning("%s fallback failed for %s - %s: %s", name, artist, title, exc)
     return record
 
 
@@ -1293,13 +890,10 @@ def enrich_lyrics(
 ) -> Optional[Dict[str, Any]]:
     """Phase 2 non-blocking enrichment for word/syllable timing.
 
-    Hierarchy:
-      1. lrc.red TTML (manual preferred, AI ``byModel`` accepted)
-      2. NetEase YRC (identity- and duration-verified)
-      3. LyricsPlus (Apple/QQ aggregator — strictly text-verified via Jaccard >= 0.60)
-
-    Returns ``{"rich_synced": dict|None, "rich_source": str}`` on a clean check,
-    or ``None`` if every attempted provider suffered a transport/network failure.
+    Hierarchy: lrc.red TTML (manual preferred, AI ``byModel`` accepted) ->
+    NetEase YRC -> LyricsPlus (strictly text-verified via Jaccard >= 0.60).
+    Returns ``None`` only when every attempted provider suffered a transport
+    failure so callers can retry on a later play.
     """
     if not artist or not title:
         return None
@@ -1307,63 +901,47 @@ def enrich_lyrics(
     clean_artist, clean_title = _canonical_metadata(artist, title)
     clean_response = False
 
-    # 1. lrc.red TTML (skip if Phase 1 already resolved via lrc.red).
-    if existing_source != LRC_RED_SOURCE and deadline - time.monotonic() >= 0.5:
-        try:
-            hit = _lrc_red_lookup(clean_artist, clean_title, duration, deadline, require_rich=True)
-            clean_response = True
-            if hit and hit.get("rich_synced"):
-                cand_text = hit.get("plain") or ""
-                if not reference_text or _text_jaccard(cand_text, reference_text) >= _LRC_RED_ENRICH_MIN_JACCARD:
-                    return {
-                        "rich_synced": hit["rich_synced"],
-                        "rich_source": hit["rich_source"],
-                    }
-        except requests.RequestException as exc:
-            logger.debug("lrc.red enrichment request failed for %s - %s: %s", artist, title, exc)
-        except (ValueError, KeyError, TypeError, ET.ParseError) as exc:
-            logger.debug("lrc.red enrichment parse error for %s - %s: %s", artist, title, exc)
+    def try_lrc_red():
+        hit = _lrc_red_lookup(clean_artist, clean_title, duration, deadline, require_rich=True)
+        if not hit or not hit.get("rich_synced"):
+            return None
+        if reference_text and _text_jaccard(hit.get("plain") or "", reference_text) < _LRC_RED_ENRICH_MIN_JACCARD:
+            return None
+        return {"rich_synced": hit["rich_synced"], "rich_source": hit["rich_source"]}
 
-    # 2. NetEase YRC (skip if Phase 1 already resolved via NetEase).
-    if existing_source != NETEASE_SOURCE and deadline - time.monotonic() >= 0.5:
-        try:
-            hit = _netease_lookup(clean_artist, clean_title, duration, deadline, require_rich=True)
-            clean_response = True
-            if hit and hit.get("rich_synced"):
-                return {
-                    "rich_synced": hit["rich_synced"],
-                    "rich_source": hit["rich_source"] or RICH_NETEASE_SOURCE,
-                }
-        except requests.RequestException as exc:
-            logger.debug("NetEase enrichment request failed for %s - %s: %s", artist, title, exc)
-        except (ValueError, KeyError, TypeError) as exc:
-            logger.debug("NetEase enrichment parse error for %s - %s: %s", artist, title, exc)
+    def try_netease():
+        hit = _netease_lookup(clean_artist, clean_title, duration, deadline, require_rich=True)
+        if not hit or not hit.get("rich_synced"):
+            return None
+        return {"rich_synced": hit["rich_synced"], "rich_source": hit["rich_source"] or RICH_NETEASE_SOURCE}
 
-    # 3. LyricsPlus (best-effort, strictly text-verified against reference_text).
-    if reference_text and deadline - time.monotonic() >= 0.5:
-        try:
-            hit = _lyricsplus_lookup(clean_artist, clean_title, album, duration, reference_text, deadline)
-            clean_response = True
-            if hit and hit.get("rich_synced"):
-                return hit
-        except requests.RequestException as exc:
-            logger.debug("LyricsPlus enrichment request failed for %s - %s: %s", artist, title, exc)
-        except (ValueError, KeyError, TypeError) as exc:
-            logger.debug("LyricsPlus enrichment parse error for %s - %s: %s", artist, title, exc)
+    def try_lyricsplus():
+        return _lyricsplus_lookup(clean_artist, clean_title, album, duration, reference_text, deadline)
 
-    if not clean_response:
-        return None
-    return {"rich_synced": None, "rich_source": RICH_NONE_SOURCE}
+    steps = []
+    if existing_source != LRC_RED_SOURCE:
+        steps.append(("lrc.red", try_lrc_red))
+    if existing_source != NETEASE_SOURCE:
+        steps.append(("NetEase", try_netease))
+    if reference_text:
+        steps.append(("LyricsPlus", try_lyricsplus))
+
+    for name, step in steps:
+        if deadline - time.monotonic() < 0.5:
+            break
+        try:
+            result = step()
+            clean_response = True
+            if result and result.get("rich_synced"):
+                return result
+        except (requests.RequestException, ValueError, KeyError, TypeError, ET.ParseError) as exc:
+            logger.debug("%s enrichment failed for %s - %s: %s", name, artist, title, exc)
+
+    return {"rich_synced": None, "rich_source": RICH_NONE_SOURCE} if clean_response else None
 
 
 class _LyricsLookupCoordinator:
-    """Bounded dedicated workers, single-flight keys, and deliberately no queue.
-
-    A semaphore is acquired before submitting to ThreadPoolExecutor, so its
-    internal work queue never accumulates waiting lyrics tasks. When all
-    workers are occupied the API responds ``pending``/``busy`` without queuing.
-    Downloader workers are entirely separate from this coordinator.
-    """
+    """Bounded dedicated workers, single-flight keys, and deliberately no queue."""
 
     def __init__(self, workers: int = _LOOKUP_WORKERS, prefix: str = "soundsible-lyrics") -> None:
         self._executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix=prefix)
@@ -1380,14 +958,6 @@ class _LyricsLookupCoordinator:
     def poll_or_start(
         self, key: str, fn, *, forget_when_done: bool = False, needed: Optional[Callable[[], bool]] = None,
     ) -> tuple[str, Optional[Dict[str, Any]]]:
-        """``forget_when_done`` is for a lookup that reports its own result:
-        nobody comes back to collect it, so it must not stay held here.
-
-        ``needed``, asked under the lock before a new lookup starts, lets the
-        caller re-check what that lookup would settle. A forgotten lookup has
-        already reported, so a caller that read its state before the report
-        landed sees the report here instead of starting the lookup again.
-        """
         with self._lock:
             job = self._jobs.get(key)
             if job is not None:
@@ -1410,7 +980,6 @@ class _LyricsLookupCoordinator:
                 self._slots.release()
                 raise
             self._jobs[key] = future
-        # Outside the lock: a lookup already finished runs its callback here.
         if forget_when_done:
             future.add_done_callback(partial(self._forget, key))
         return "pending", None
@@ -1448,14 +1017,30 @@ def metadata_cache_key(
     album: Optional[str] = None,
     duration: Optional[int] = None,
 ) -> str:
-    """Stable, opaque cache identity for a metadata-only streaming track.
-
-    Preview ids are transport identities and may change, but the normalized
-    signature used to resolve the lyrics is stable. Hashing also avoids
-    persisting user-supplied metadata verbatim as a SQLite primary key.
-    """
+    """Stable, opaque cache identity for a metadata-only streaming track."""
     digest = hashlib.sha256(_lookup_key(artist, title, album, duration).encode("utf-8")).hexdigest()
     return f"metadata-lyrics:{digest}"
+
+
+def _poll(
+    coordinator: _LyricsLookupCoordinator,
+    key: str,
+    lookup: Callable[[], Optional[Dict[str, Any]]],
+    on_complete: Optional[Callable[[Optional[Dict[str, Any]]], Any]] = None,
+    needed: Optional[Callable[[], bool]] = None,
+) -> tuple[str, Optional[Dict[str, Any]]]:
+    if on_complete is None:
+        return coordinator.poll_or_start(key, lookup, needed=needed)
+
+    def run_and_report():
+        result = lookup()
+        try:
+            on_complete(result)
+        except Exception as exc:
+            logger.warning("Lyrics completion callback failed: %s", exc)
+        return result
+
+    return coordinator.poll_or_start(key, run_and_report, forget_when_done=True, needed=needed)
 
 
 def poll_lyrics(
@@ -1466,29 +1051,14 @@ def poll_lyrics(
     on_complete: Optional[Callable[[Optional[Dict[str, Any]]], Any]] = None,
     needed: Optional[Callable[[], bool]] = None,
 ) -> tuple[str, Optional[Dict[str, Any]]]:
-    """Poll/start a bounded Phase 1 background lookup.
-
-    Status is ``complete``, ``pending``, ``busy`` or ``settled``. Busy means
-    both dedicated workers are active; no server-side task was buffered.
-    ``on_complete``, if this call starts the lookup, receives its record on the
-    worker as soon as it lands — for a caller that will not come back to
-    collect it. ``needed`` is checked before a new lookup starts; when it says
-    no, nothing starts and the status is ``settled``: what the caller read is
-    out of date, and it reads again.
-    """
-    key = _lookup_key(artist, title, album, duration)
-    lookup = partial(fetch_lyrics, artist, title, album, duration)
-    if on_complete is not None:
-        def lookup_and_report(fetch=lookup):
-            record = fetch()
-            try:
-                on_complete(record)
-            except Exception as exc:
-                logger.warning("Lyrics completion callback failed: %s", exc)
-            return record
-
-        return _LOOKUPS.poll_or_start(key, lookup_and_report, forget_when_done=True, needed=needed)
-    return _LOOKUPS.poll_or_start(key, lookup, needed=needed)
+    """Poll/start a bounded Phase 1 background lookup."""
+    return _poll(
+        _LOOKUPS,
+        _lookup_key(artist, title, album, duration),
+        partial(fetch_lyrics, artist, title, album, duration),
+        on_complete,
+        needed,
+    )
 
 
 def poll_enrichment(
@@ -1503,52 +1073,21 @@ def poll_enrichment(
     needed: Optional[Callable[[], bool]] = None,
 ) -> tuple[str, Optional[Dict[str, Any]]]:
     """Poll/start a bounded Phase 2 background rich-timing enrichment."""
-    key = f"enrich:v1\x00{_lookup_key(artist, title, album, duration)}"
-    lookup = partial(
-        enrich_lyrics,
-        artist,
-        title,
-        album,
-        duration,
-        reference_text=reference_text,
-        existing_source=existing_source,
+    return _poll(
+        _ENRICHMENTS,
+        f"enrich:v1\x00{_lookup_key(artist, title, album, duration)}",
+        partial(
+            enrich_lyrics,
+            artist,
+            title,
+            album,
+            duration,
+            reference_text=reference_text,
+            existing_source=existing_source,
+        ),
+        on_complete,
+        needed,
     )
-    if on_complete is not None:
-        def enrich_and_report(fetch=lookup):
-            result = fetch()
-            try:
-                on_complete(result)
-            except Exception as exc:
-                logger.warning("Lyrics enrichment callback failed: %s", exc)
-            return result
-
-        return _ENRICHMENTS.poll_or_start(key, enrich_and_report, forget_when_done=True, needed=needed)
-    return _ENRICHMENTS.poll_or_start(key, lookup, needed=needed)
-
-
-_LRC_TIMESTAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")
-
-
-def parse_lrc(text: str) -> list[tuple[int, str]]:
-    """LRC text as ``(offset in milliseconds, line)``, in time order.
-
-    The player parses this in the browser; a client that speaks a protocol with
-    timed lyrics needs the same reading server-side. One line may carry several
-    stamps — that is how an LRC file writes a repeated chorus — so each becomes
-    its own entry.
-    """
-    lines: list[tuple[int, str]] = []
-    for raw in str(text or "").splitlines():
-        stamps = list(_LRC_TIMESTAMP.finditer(raw))
-        if not stamps:
-            continue
-        content = raw[stamps[-1].end():].strip()
-        for stamp in stamps:
-            minutes, seconds, fraction = stamp.groups()
-            # Two digits after the separator are hundredths, three are millis.
-            millis = int((fraction or "0").ljust(3, "0")[:3]) if fraction else 0
-            lines.append((int(minutes) * 60_000 + int(seconds) * 1000 + millis, content))
-    return sorted(lines, key=lambda entry: entry[0])
 
 
 def _reset_lyrics_jobs_for_tests() -> None:
