@@ -56,9 +56,9 @@ def test_player_waits_past_healthy_engine_and_same_title_shell(smoke, monkeypatc
     player = Mock()
     player.window_text.return_value = "Soundsible"
     player.is_visible.return_value = True
-    library = Mock()
-    library.window_text.return_value = "Library"
-    player.descendants.return_value = [library]
+    home = Mock()
+    home.window_text.return_value = "Home"
+    player.descendants.return_value = [home]
     desktop = smoke.Desktop.return_value
     desktop.windows.side_effect = [[shell], [shell, player]]
 
@@ -74,9 +74,9 @@ def test_player_ignores_hidden_previous_window(smoke):
     player = Mock()
     player.window_text.return_value = "Soundsible"
     player.is_visible.return_value = True
-    library = Mock()
-    library.window_text.return_value = "Library"
-    player.descendants.return_value = [library]
+    home = Mock()
+    home.window_text.return_value = "Home"
+    player.descendants.return_value = [home]
     smoke.Desktop.return_value.windows.return_value = [hidden, player]
 
     assert smoke.player_window(123) is player
