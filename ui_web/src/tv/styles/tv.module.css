@@ -88,10 +88,6 @@
   cursor: pointer;
 }
 
-.tvRail .tvRailItem:not([aria-current]):not(:hover):not(:focus) {
-  background: transparent;
-}
-
 .tvRailItem > span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;
