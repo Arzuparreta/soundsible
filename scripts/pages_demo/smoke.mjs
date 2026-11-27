@@ -4,7 +4,7 @@ const { chromium, webkit } = createRequire(new URL('../../ui_web/package.json', 
 const mobile = process.argv[3] === 'webkit';
 const browser = await (mobile ? webkit : chromium).launch();
 try {
-  const page = await browser.newPage({ viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 } });
+  const page = await browser.newPage({ serviceWorkers: 'block', viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 } });
   await page.addInitScript(() => {
     const play = HTMLMediaElement.prototype.play;
     HTMLMediaElement.prototype.play = function () {
@@ -17,7 +17,7 @@ try {
   await page.waitForFunction(() => window.demoAudio?.currentTime > 0.5);
   await page.evaluate(() => { window.demoAudio.currentTime = window.demoAudio.duration - 2; });
   await page.waitForFunction(() => window.demoAudio.currentTime > 13);
-  await page.waitForFunction(() => window.demoAudio.currentSrc.endsWith('/late-platform') && window.demoAudio.currentTime > 0.2);
+  await page.waitForFunction(() => window.demoAudio.currentSrc.endsWith('/late-platform.wav') && window.demoAudio.currentTime > 0.2);
   console.log('Playback, seek and automatic track advance passed.');
 } finally {
   await browser.close();
