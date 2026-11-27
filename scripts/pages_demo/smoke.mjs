@@ -56,10 +56,16 @@ try {
     next = 'pompeii';
   }
 
-  // The native keyboard interaction exercises the real seek input and sends
-  // playback near the end without modifying the media element under test.
+  // Drive the release player's seek handler through its range input. Seek
+  // shortly before the end so the browser completes normal audio playback.
   const seek = player.locator('[data-omni-seek]').getByRole('slider', { name: 'Seek' });
-  await seek.press('End');
+  const target = await seek.evaluate(input => {
+    const position = Number(input.max) - 3;
+    input.value = String(position);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return position;
+  });
+  await frame.waitForFunction(position => window.demoAudio.currentTime >= position - 0.5, target);
   await frame.waitForFunction(track =>
     window.demoAudio?.currentSrc.includes(`/media/${track}-`) && window.demoAudio.currentTime > 0.2, next);
 
