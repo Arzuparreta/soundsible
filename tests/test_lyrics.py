@@ -82,8 +82,10 @@ def _fake_api(track):
 
 @pytest.fixture(autouse=True)
 def _reset(tmp_path, monkeypatch):
-    # No test reaches the network: lrc.red knows nothing unless a test says so.
+    # No test reaches the network: secondary providers know nothing unless a test says so.
     monkeypatch.setattr(lyrics_module, "_lrc_red_get", lambda path, params, timeout_sec: None)
+    monkeypatch.setattr(lyrics_module, "_netease_get", lambda path, params, timeout_sec: None)
+    monkeypatch.setattr(lyrics_module, "_lyricsplus_get", lambda params, timeout_sec: None)
     reset_runtime()
     lyrics_module._reset_lyrics_jobs_for_tests()
     _make_runtime(tmp_path)
@@ -107,10 +109,12 @@ def test_lyrics_fetch_and_cache(monkeypatch):
     assert body == {
         "status": "ready",
         "synced": "[00:01.00] hello",
+        "rich_synced": None,
         "plain": "hello",
         "instrumental": False,
         "cached": False,
         "pending": False,
+        "enriching": body["enriching"],
         "timing_safe": True,
         "synced_duration": None,
         "offset_ms": None,
@@ -155,10 +159,12 @@ def test_lyrics_provider_error_not_cached(monkeypatch):
     assert body == {
         "status": "unavailable",
         "synced": None,
+        "rich_synced": None,
         "plain": None,
         "instrumental": False,
         "cached": False,
         "pending": False,
+        "enriching": False,
         "timing_safe": True,
         "synced_duration": None,
         "offset_ms": None,
@@ -852,13 +858,29 @@ def test_deezer_fallback_searches_with_a_plain_query(monkeypatch):
     assert seen["q"] == "Artist Song (In The World)"
 
 
-# ── lrc.red, after LRCLIB ──
+# ── lrc.red TTML, NetEase YRC, and Phase 2 enrichment ──
 
-_ENHANCED_LRC = (
-    "[ti:Song]\n[ar:Artist]\n[length:03:20]\n\n"
-    "[00:01.00]<00:01.00>First <00:01.40>line <00:02.10>\n"
-    "[00:04.50]<00:04.50>Second  <00:05.00>line <00:06.00>\n"
-    "[00:08.00]\n"
+_SAMPLE_TTML = (
+    '<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">'
+    "<body><div>"
+    '<p begin="00:01.000" end="00:02.100">'
+    '<span begin="00:01.000" end="00:01.400">First</span> '
+    '<span begin="00:01.400" end="00:01.700">sy</span><span begin="00:01.700" end="00:02.100">llable</span>'
+    "</p>"
+    '<p begin="00:04.500" end="00:06.000">'
+    '<span begin="00:04.500" end="00:05.000">Se</span><span begin="00:05.000" end="00:05.400">cond</span> '
+    '<span begin="00:05.400" end="00:06.000">line</span>'
+    '<span ttm:role="x-bg"><span begin="00:05.600" end="00:06.200">echo</span></span>'
+    '<span ttm:role="x-translation">ignored translation</span>'
+    "</p>"
+    "</div></body></tt>"
+)
+
+_LINE_ONLY_TTML = (
+    '<tt xmlns="http://www.w3.org/ns/ttml"><body><div>'
+    '<p begin="00:01.000" end="00:02.100">First line</p>'
+    '<p begin="00:04.500" end="00:06.000">Second line</p>'
+    "</div></body></tt>"
 )
 
 
@@ -871,15 +893,15 @@ class _LrcRedReply:
         return self.body
 
 
-def _lrc_red(monkeypatch, hits, lrc=_ENHANCED_LRC):
-    """lrc.red answering a search with ``hits`` and every hit's lines with ``lrc``."""
+def _lrc_red(monkeypatch, hits, ttml=_SAMPLE_TTML):
+    """lrc.red answering a search with ``hits`` and every hit's TTML with ``ttml``."""
     calls = []
 
     def fake_get(path, params, timeout_sec):
         calls.append(path)
         if path == "/search.json":
             return _LrcRedReply({"hits": hits})
-        return _LrcRedReply(lrc) if lrc is not None else None
+        return _LrcRedReply(ttml) if ttml is not None else None
 
     monkeypatch.setattr(lyrics_module, "_lrc_red_get", fake_get)
     return calls
@@ -900,26 +922,38 @@ def test_lrc_red_answers_a_song_lrclib_does_not_know(monkeypatch):
 
     record = lyrics_module.fetch_lyrics("Artist", "Song", "Album", 200)
 
-    assert calls == ["/search.json", "/s/USABC1234567.lrc"]
-    # Line LRC: no word stamps, no header tags, the instrumental gap kept.
-    assert record == {
-        "synced": "[00:01.00]First line\n[00:04.50]Second line\n[00:08.00]",
-        "plain": "First line\nSecond line",
-        "instrumental": False,
-        "source": lyrics_module.LRC_RED_SOURCE,
-        "synced_duration": 200,
-    }
+    assert calls == ["/search.json", "/s/USABC1234567.ttml"]
+    assert record["synced"] == "[00:01.00]First syllable\n[00:04.50]Second line"
+    assert record["plain"] == "First syllable\nSecond line"
+    assert record["instrumental"] is False
+    assert record["source"] == lyrics_module.LRC_RED_SOURCE
+    assert record["synced_duration"] == 200
+    assert record["rich_source"] == lyrics_module.RICH_LRC_RED_SOURCE
+    rich = record["rich_synced"]
+    assert rich["granularity"] == "syllable"
+    assert rich["dur"] == 200
+    # First line preserves the syllable split ("sy" + "llable" without space).
+    assert rich["lines"][0]["s"] == [
+        {"t": 1000, "e": 1400, "x": "First "},
+        {"t": 1400, "e": 1700, "x": "sy"},
+        {"t": 1700, "e": 2100, "x": "llable"},
+    ]
+    # Background vocal separated cleanly; translation ignored.
+    assert rich["lines"][2]["bg"] is True
+    assert rich["lines"][2]["s"] == [{"t": 5600, "e": 6200, "x": "echo"}]
     assert lyrics_module.provider(record) == "lrc.red"
 
 
 def test_lrc_red_times_lyrics_lrclib_only_has_as_text(monkeypatch):
     _lrclib(monkeypatch, [{"trackName": "Song", "artistName": "Artist", "duration": 200, "plainLyrics": "text"}])
-    _lrc_red(monkeypatch, [_hit()])
+    _lrc_red(monkeypatch, [_hit()], ttml=_LINE_ONLY_TTML)
 
     record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
 
     assert record["source"] == lyrics_module.LRC_RED_SOURCE
     assert record["synced"].startswith("[00:01.00]First line")
+    assert record["rich_synced"] is None
+    assert record["rich_source"] is None
 
 
 def test_lrc_red_replaces_lines_lrclib_timed_for_another_cut(monkeypatch):
@@ -943,8 +977,23 @@ def test_lrc_red_is_not_asked_when_lrclib_timing_fits(monkeypatch):
     assert calls == []
 
 
+def test_lrc_red_accepts_by_model_and_prefers_manual_hits(monkeypatch):
+    _lrclib(monkeypatch, [])
+    _lrc_red(monkeypatch, [_hit(isrc="USAI00000001", byModel=True)])
+    ai_record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
+    assert ai_record["rich_source"] == lyrics_module.RICH_LRC_RED_AI_SOURCE
+
+    # When both manual and AI hits match, manual wins.
+    calls = _lrc_red(monkeypatch, [
+        _hit(isrc="USAI00000001", byModel=True),
+        _hit(isrc="USMAN0000002", byModel=False),
+    ])
+    manual_record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
+    assert calls == ["/search.json", "/s/USMAN0000002.ttml"]
+    assert manual_record["rich_source"] == lyrics_module.RICH_LRC_RED_SOURCE
+
+
 @pytest.mark.parametrize("hit", [
-    _hit(byModel=True),
     _hit(title="Song (Acoustic)"),
     _hit(title="Another Song Entirely"),
     _hit(artist="Somebody Else"),
@@ -964,7 +1013,13 @@ def test_lrc_red_hits_that_are_not_this_recording_are_passed_over(monkeypatch, h
 
 def test_lrc_red_lines_that_outlast_the_recording_are_refused(monkeypatch):
     _lrclib(monkeypatch, [])
-    _lrc_red(monkeypatch, [_hit(duration=None)], lrc="[00:01.00] a\n[04:30.00] z\n")
+    long_ttml = (
+        '<tt xmlns="http://www.w3.org/ns/ttml"><body><div>'
+        '<p begin="00:01.000" end="00:02.000">a</p>'
+        '<p begin="04:30.000" end="04:35.000">z</p>'
+        "</div></body></tt>"
+    )
+    _lrc_red(monkeypatch, [_hit(duration=None)], ttml=long_ttml)
 
     record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
 
@@ -973,7 +1028,7 @@ def test_lrc_red_lines_that_outlast_the_recording_are_refused(monkeypatch):
 
 def test_an_lrc_red_track_without_timed_lines_is_a_miss(monkeypatch):
     _lrclib(monkeypatch, [])
-    _lrc_red(monkeypatch, [_hit()], lrc=None)
+    _lrc_red(monkeypatch, [_hit()], ttml=None)
 
     record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
 
@@ -1019,6 +1074,123 @@ def test_lrc_red_requests_carry_its_own_client_identification(monkeypatch):
     assert "@" in lyrics_module._LRC_RED_CONTACT
 
 
+def test_netease_yrc_fallback_strips_credits_and_builds_rich_timing(monkeypatch):
+    _lrclib(monkeypatch, [])
+    yrc = (
+        '{"t":0,"c":[{"tx":"作词: Author"}]}\n'
+        "[0,1000](0,1000,0)作词 : Author\n"
+        "[1000,1500](1000,500,0)Hello (1500,1000,0)world\n"
+        "[3000,1200](3000,600,0)Second (3600,600,0)line\n"
+    )
+
+    def fake_netease(path, params, timeout_sec):
+        if path == "/api/search/get":
+            return _LrcRedReply({
+                "code": 200,
+                "result": {"songs": [{"id": 42, "name": "Song", "artists": [{"name": "Artist"}], "duration": 200_000}]},
+            })
+        return _LrcRedReply({"code": 200, "yrc": {"lyric": yrc}, "lrc": {"lyric": ""}})
+
+    monkeypatch.setattr(lyrics_module, "_netease_get", fake_netease)
+    record = lyrics_module.fetch_lyrics("Artist", "Song", None, 200)
+
+    assert record["source"] == lyrics_module.NETEASE_SOURCE
+    assert record["synced"] == "[00:01.00]Hello world\n[00:03.00]Second line"
+    assert record["rich_source"] == lyrics_module.RICH_NETEASE_SOURCE
+    assert record["rich_synced"]["granularity"] == "word"
+    assert len(record["rich_synced"]["lines"]) == 2
+
+
+def test_lyricsplus_enrichment_requires_text_verification(monkeypatch):
+    lp_payload = {
+        "type": "Word",
+        "metadata": {"source": "Apple", "totalDuration": "3:20.000"},
+        "lyrics": [
+            {
+                "time": 1000, "duration": 1500, "text": "Hello world tonight",
+                "syllabus": [
+                    {"time": 1000, "duration": 500, "text": "Hello "},
+                    {"time": 1500, "duration": 500, "text": "world "},
+                    {"time": 2000, "duration": 500, "text": "to"},
+                    {"time": 2250, "duration": 250, "text": "night"},
+                ],
+            },
+            {
+                "time": 3000, "duration": 1500, "text": "Second line forever",
+                "syllabus": [
+                    {"time": 3000, "duration": 500, "text": "Second "},
+                    {"time": 3500, "duration": 500, "text": "line "},
+                    {"time": 4000, "duration": 250, "text": "for"},
+                    {"time": 4250, "duration": 250, "text": "ever"},
+                ],
+            },
+        ],
+    }
+    monkeypatch.setattr(lyrics_module, "_lyricsplus_get", lambda params, timeout_sec: _LrcRedReply(lp_payload))
+
+    # Matching reference text passes Jaccard >= 0.60 and produces syllable timing.
+    ok = lyrics_module.enrich_lyrics(
+        "Artist", "Song", "Album", 200, reference_text="Hello world tonight\nSecond line forever",
+    )
+    assert ok["rich_source"] == lyrics_module.RICH_LYRICSPLUS_SOURCE
+    assert ok["rich_synced"]["granularity"] == "syllable"
+
+    # Unrelated reference text (wrong song / remix mismatch) is rejected cleanly.
+    mismatch = lyrics_module.enrich_lyrics(
+        "Artist", "Song (Afro House Remix)", "Album", 200, reference_text="Completely different lyrics here",
+    )
+    assert mismatch == {"rich_synced": None, "rich_source": lyrics_module.RICH_NONE_SOURCE}
+
+
+def test_phase2_enrichment_upgrades_lrclib_without_touching_line_source(monkeypatch):
+    monkeypatch.setattr(library_routes, "_get_api", lambda: _fake_api(_track()))
+    db = instance_db()
+    db.set_lyrics(
+        "track-1",
+        synced="[00:01.00]First syllable\n[00:04.50]Second line",
+        plain="First syllable\nSecond line",
+        instrumental=False,
+        source=lyrics_module.RESOLVER_SOURCE,
+        synced_duration=200,
+    )
+    _lrc_red(monkeypatch, [_hit()])
+
+    client = _make_app().test_client()
+    first = client.get("/api/library/tracks/track-1/lyrics").get_json()
+    # Served immediately without waiting on Phase 2.
+    assert first["status"] == "ready"
+    assert first["synced"] == "[00:01.00]First syllable\n[00:04.50]Second line"
+
+    # Wait for background enrichment to settle and re-read.
+    body = first
+    for _ in range(200):
+        if body.get("rich_synced"):
+            break
+        time.sleep(0.005)
+        body = client.get("/api/library/tracks/track-1/lyrics").get_json()
+
+    assert body["rich_synced"]["granularity"] == "syllable"
+    assert body["enriching"] is False
+    # Player UI credits lrc.red because lrc.red supplied the rich timing...
+    assert body["provider"] == "lrc.red"
+    # ...while the underlying line LRC stays LRCLIB so OpenSubsonic keeps serving it.
+    row = db.get_lyrics("track-1")
+    assert row["source"] == lyrics_module.RESOLVER_SOURCE
+    assert lyrics_module.provider(row) == "lrclib"
+    assert row["rich_source"] == lyrics_module.RICH_LRC_RED_SOURCE
+
+
+def test_enrichment_transient_outage_does_not_stamp_none(monkeypatch):
+    def down(*_args, **_kwargs):
+        raise lyrics_module.requests.ConnectionError("offline")
+
+    monkeypatch.setattr(lyrics_module, "_lrc_red_get", down)
+    monkeypatch.setattr(lyrics_module, "_netease_get", down)
+    monkeypatch.setattr(lyrics_module, "_lyricsplus_get", down)
+
+    assert lyrics_module.enrich_lyrics("Artist", "Song", None, 200, reference_text="hello") is None
+
+
 def test_lyrics_are_looked_up_again_only_where_the_resolver_can_do_better():
     again = lyrics_module.worth_looking_up_again
     fitting = {"synced": "[00:01.00] a", "plain": "a", "source": "lrclib:v5", "synced_duration": 200}
@@ -1028,7 +1200,7 @@ def test_lyrics_are_looked_up_again_only_where_the_resolver_can_do_better():
     assert again({"synced": None, "plain": None, "instrumental": True, "source": "lrclib:v5"}, 200)
     # Lines older than their length are looked up whatever they claim.
     assert again({**fitting, "source": "lrclib:v4", "synced_duration": None}, 200)
-    for source in (lyrics_module.RESOLVER_SOURCE, lyrics_module.LRC_RED_SOURCE):
+    for source in (lyrics_module.RESOLVER_SOURCE, lyrics_module.LRC_RED_SOURCE, lyrics_module.NETEASE_SOURCE):
         assert not again({"synced": None, "plain": "a", "source": source}, 200)
 
 

@@ -23,6 +23,7 @@ export function openNativeLyrics(program: () => ProgramState | null, library: ()
     return <section class={styles.panel} data-native-lyrics>
       <h2>{t('nowPlaying.showLyrics')}</h2><button onClick={() => close()}>{t('common.close')}</button>
       <LyricsPanelView playback={{ currentTrack: track, currentTime: () => (program()?.positionMs ?? 0) / 1000,
+        isPlaying: () => Boolean(program()?.playing),
         inLibrary: row => library().some(entry => entry.id === row.id && entry.source !== 'preview'),
         saved: row => { const keys = new Set(trackKeys(row)); return saved().some(entry => entry.keys.some(key => keys.has(key))); },
         mediaDuration: () => { const ms = program()?.durationMs ?? 0; return ms > 0 ? ms / 1000 : undefined; },

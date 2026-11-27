@@ -544,6 +544,15 @@ class SchemaMixin:
             # recording of another length can be told apart from the one they
             # fit. Older rows have none and are re-resolved when next read.
             conn.execute("ALTER TABLE track_lyrics ADD COLUMN synced_duration INTEGER")
+        if "rich_synced" not in columns:
+            # Optional word/syllable timing JSON from background enrichment.
+            # Kept separate from line LRC (`synced`) so enrichment never
+            # reduces line coverage or leaks attributed providers to Subsonic.
+            conn.execute("ALTER TABLE track_lyrics ADD COLUMN rich_synced TEXT")
+        if "rich_source" not in columns:
+            # Enrichment state: NULL (not yet tried), "none:v1" (checked, no
+            # rich timing found), or "<provider>:v1" / "lrc.red:ai:v1".
+            conn.execute("ALTER TABLE track_lyrics ADD COLUMN rich_source TEXT")
         # How far a recording's timeline sits from its lyrics' timing, set by a
         # listener. Keyed by the audio (a video, or a file with no video), not by
         # the lyrics row, so a refreshed lookup keeps it and every copy of the

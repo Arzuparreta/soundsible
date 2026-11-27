@@ -27,7 +27,11 @@ class LyricsStore:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
-                "SELECT synced, plain, instrumental, source, synced_duration, checked_at FROM track_lyrics WHERE track_id = ?",
+                """
+                SELECT synced, plain, instrumental, source, synced_duration,
+                       rich_synced, rich_source, checked_at
+                FROM track_lyrics WHERE track_id = ?
+                """,
                 (track_id,),
             ).fetchone()
             if not row:
@@ -64,6 +68,8 @@ class LyricsStore:
         instrumental: bool = False,
         source: Optional[str] = None,
         synced_duration: Optional[int] = None,
+        rich_synced: Optional[str] = None,
+        rich_source: Optional[str] = None,
     ) -> None:
         """Upsert the lyrics record for a track (also used for negative caching)."""
         if not track_id:
@@ -73,22 +79,63 @@ class LyricsStore:
             try:
                 conn.execute(
                     """
-                    INSERT INTO track_lyrics (track_id, synced, plain, instrumental, source, synced_duration, checked_at)
-                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO track_lyrics (
+                        track_id, synced, plain, instrumental, source,
+                        synced_duration, rich_synced, rich_source, checked_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(track_id) DO UPDATE SET
                         synced=excluded.synced,
                         plain=excluded.plain,
                         instrumental=excluded.instrumental,
                         source=excluded.source,
                         synced_duration=excluded.synced_duration,
+                        rich_synced=excluded.rich_synced,
+                        rich_source=excluded.rich_source,
                         checked_at=CURRENT_TIMESTAMP
                     """,
-                    (track_id, synced, plain, 1 if instrumental else 0, source, synced_duration),
+                    (
+                        track_id,
+                        synced,
+                        plain,
+                        1 if instrumental else 0,
+                        source,
+                        synced_duration,
+                        rich_synced,
+                        rich_source,
+                    ),
                 )
                 conn.execute("COMMIT")
             except Exception as e:
                 conn.execute("ROLLBACK")
                 logger.warning("Error caching lyrics: %s", e)
+
+    def set_lyrics_enrichment(
+        self,
+        track_id: str,
+        *,
+        rich_synced: Optional[str],
+        rich_source: Optional[str],
+    ) -> None:
+        """Attach rich word/syllable timing (or a checked-empty marker) to an
+        existing cached lyrics row without touching its line LRC or source."""
+        if not track_id:
+            return
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute(
+                    """
+                    UPDATE track_lyrics
+                    SET rich_synced = ?, rich_source = ?
+                    WHERE track_id = ?
+                    """,
+                    (rich_synced, rich_source, track_id),
+                )
+                conn.execute("COMMIT")
+            except Exception as e:
+                conn.execute("ROLLBACK")
+                logger.warning("Error caching lyrics enrichment: %s", e)
 
     def get_lyrics_offset(self, audio_key: str) -> Optional[int]:
         """The listener's lyrics offset for this audio, in milliseconds."""
