@@ -154,6 +154,7 @@ function TvShellInner(props: TvAppProps) {
   onMount(() => {
     initStore({
       desktopShortcuts: false,
+      fixedTheme: 'dark',
       remoteCommands: TV_REMOTE_COMMANDS,
     });
     props.onReady?.();

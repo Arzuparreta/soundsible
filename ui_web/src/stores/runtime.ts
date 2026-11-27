@@ -96,6 +96,8 @@ export interface RuntimePorts {
 
 /** Owns runtime behaviour; cross-domain work enters through explicit ports. */
 export interface StoreInitOptions {
+  /** Use a surface-specific palette without changing the shared browser preference. */
+  fixedTheme?: 'dark';
   /** Install global desktop/player keyboard shortcuts (disabled on D-pad TV surfaces). */
   desktopShortcuts?: boolean;
   /** Optional explicit remote command allow-list applied to `state.device.commands`. */
@@ -181,11 +183,14 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       interfaceSize: state.interfaceSize,
       highContrast: state.highContrast
     });
-    lifetime.own(installAppearanceAutomation(() => ({ theme: state.theme, colors: state.customColors }), preferenceActions.setTheme));
-    applyTheme(state.theme);
-    // Catch the shell up on a preference chosen before it could be told — an
-    // upgrade, or a theme set in a browser and first met on the desktop.
-    announceTheme(state.theme);
+    if (options?.fixedTheme) {
+      applyTheme(options.fixedTheme);
+    } else {
+      lifetime.own(installAppearanceAutomation(() => ({ theme: state.theme, colors: state.customColors }), preferenceActions.setTheme));
+      applyTheme(state.theme);
+      // Catch the shell up on a preference chosen before it could be told.
+      announceTheme(state.theme);
+    }
     try {
       void api.getDiscoverySettings().then(lifetime.guard(settings => {
         if (typeof settings.autoplay_enabled === 'boolean') {

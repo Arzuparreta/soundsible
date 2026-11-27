@@ -183,9 +183,12 @@ test('readability metrics, 5% safe margins, and responsive 1080p/720p scaling', 
   test.skip(testInfo.project.name.includes('mobile'), 'Smart TV runs on living-room viewports');
 
   await setupTvSession(page, { viewport: { width: 1920, height: 1080 } });
+  await page.addInitScript(() => localStorage.setItem('theme', 'light'));
   await page.goto('/tv/');
   const resumeOrCard = page.locator('[data-tv-id]').first();
   await expect(resumeOrCard).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  expect(await page.evaluate(() => localStorage.getItem('theme'))).toBe('light');
 
   const metrics1080 = await page.evaluate(() => {
     const main = document.querySelector('[data-tv-scroll-y="main"]') as HTMLElement;
