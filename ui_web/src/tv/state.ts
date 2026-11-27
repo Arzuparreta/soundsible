@@ -25,6 +25,10 @@ const [searchSubmittedQuery, setSearchSubmittedQuery] = createSignal('');
 const [searchStatus, setSearchStatus] = createSignal<'idle' | 'loading' | 'ready' | 'error'>('idle');
 const [searchResults, setSearchResults] = createSignal<TvSearchResultSet>(emptySearchResults());
 const [libraryTab, setLibraryTab] = createSignal<TvLibraryTab>();
+const [libraryAlbums, setLibraryAlbums] = createSignal<CatalogAlbum[]>([]);
+const [libraryAlbumsHasMore, setLibraryAlbumsHasMore] = createSignal(false);
+const [libraryAlbumsNextOffset, setLibraryAlbumsNextOffset] = createSignal(0);
+const [libraryAlbumsRevision, setLibraryAlbumsRevision] = createSignal<number | null>(null);
 const [queueOpen, setQueueOpen] = createSignal(false);
 const [dimActive, setDimActive] = createSignal(false);
 const [tvNotice, setTvNotice] = createSignal<string | null>(null);
@@ -61,6 +65,10 @@ export function resetTvState(): void {
   setSearchStatus('idle');
   setSearchResults(emptySearchResults());
   setLibraryTab(undefined);
+  setLibraryAlbums([]);
+  setLibraryAlbumsHasMore(false);
+  setLibraryAlbumsNextOffset(0);
+  setLibraryAlbumsRevision(null);
   setQueueOpen(false);
   setDimActive(false);
   setTvNotice(null);
@@ -83,6 +91,14 @@ export {
   setSearchResults,
   libraryTab,
   setLibraryTab,
+  libraryAlbums,
+  setLibraryAlbums,
+  libraryAlbumsHasMore,
+  setLibraryAlbumsHasMore,
+  libraryAlbumsNextOffset,
+  setLibraryAlbumsNextOffset,
+  libraryAlbumsRevision,
+  setLibraryAlbumsRevision,
   queueOpen,
   setQueueOpen,
   dimActive,

@@ -9,7 +9,7 @@ import { trackCount } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { coverUrl, trackCoverUrl } from '../../lib/media';
 import type { PlaybackContextDescriptor } from '../../lib/playbackQueue';
-import { actions, isPlayingTrack, musicLibrary, state } from '../../stores';
+import { actions, isPlayingItem, isPlayingTrack, musicLibrary, state } from '../../stores';
 import type { CatalogAlbum, CatalogItem, Track } from '../../types/music';
 import { TvArtwork } from '../components/TvArtwork';
 import { TvTrackRow } from '../components/TvTrackRow';
@@ -27,6 +27,7 @@ interface TvAlbumDetailProps {
   albumName: string;
   artist: string;
   deezerId?: string;
+  source?: 'library' | 'catalog';
   onBack: () => void;
 }
 
@@ -39,6 +40,8 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal(false);
 
+  const isCatalog = () => props.source === 'catalog' || Boolean(props.deezerId);
+
   let loadGen = 0;
 
   async function loadAlbum(signal?: AbortSignal): Promise<void> {
@@ -46,8 +49,12 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
 
     setLoading(true);
     setError(false);
+    setAlbum(null);
+    setTrackIds([]);
+    setCatalogTracks([]);
+    setExternalCover(undefined);
 
-    if (!props.albumId.includes('::')) {
+    if (!isCatalog() && !props.albumId.includes('::')) {
       try {
         const res = await api.getLibraryAlbum(props.albumId);
         if (gen !== loadGen || signal?.aborted) return;
@@ -99,6 +106,7 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
     void props.albumName;
     void props.artist;
     void props.deezerId;
+    void props.source;
     const ac = new AbortController();
     onCleanup(() => ac.abort());
     void loadAlbum(ac.signal);
@@ -122,29 +130,36 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
     cover: externalCover(),
   });
 
+  const useCatalogRows = createMemo(
+    () => catalogTracks().length > 0 && (isCatalog() || localTracks().length === 0),
+  );
+
   function playAt(index: number): void {
+    if (useCatalogRows()) {
+      const items = catalogTracks();
+      const chosen = items[index];
+      if (chosen) {
+        void playCatalogItem(chosen, items, contextDescriptor());
+      }
+      return;
+    }
+    if (isCatalog() && loading()) return;
     const locals = localTracks();
     if (locals.length > 0) {
       actions.playFrom(locals, index, { context: contextDescriptor() });
-      return;
-    }
-    const items = catalogTracks();
-    const chosen = items[index];
-    if (chosen) {
-      void playCatalogItem(chosen, items, contextDescriptor());
     }
   }
 
   const rows = createMemo<AlbumRow[]>(() => {
-    const locals = localTracks();
-    if (locals.length > 0) {
-      return locals.map((track): AlbumRow => ({ kind: 'local', track }));
+    if (useCatalogRows()) {
+      return catalogTracks().map((item): AlbumRow => ({
+        kind: 'catalog',
+        item,
+        resolved: catalogTrack(item, state.library),
+      }));
     }
-    return catalogTracks().map((item): AlbumRow => ({
-      kind: 'catalog',
-      item,
-      resolved: catalogTrack(item, state.library),
-    }));
+    if (isCatalog() && loading()) return [];
+    return localTracks().map((track): AlbumRow => ({ kind: 'local', track }));
   });
 
   return (
@@ -245,7 +260,7 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
                 artist: item.artist || item.subtitle || displayArtist(),
                 duration: item.duration,
                 artwork: value.resolved ? trackCoverUrl(value.resolved, 'thumb') : safeExternalCover(item.cover),
-                playing: Boolean(value.resolved && isPlayingTrack(value.resolved)),
+                playing: isPlayingItem(item) || Boolean(value.resolved && isPlayingTrack(value.resolved)),
               };
             });
 

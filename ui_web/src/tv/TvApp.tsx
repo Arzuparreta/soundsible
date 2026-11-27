@@ -334,6 +334,7 @@ function TvShellInner(props: TvAppProps) {
                       albumName={r.albumName}
                       artist={r.artist}
                       deezerId={r.deezerId}
+                      source={r.source}
                       onBack={() => void handleRoutePop()}
                     />
                   );

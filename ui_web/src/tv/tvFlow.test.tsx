@@ -73,6 +73,12 @@ const { mockState, setMockState } = vi.hoisted(() => ({
 }));
 void setMockState;
 
+const mockPlayCatalogItem = vi.hoisted(() => vi.fn());
+
+vi.mock('../lib/catalogItem', () => ({
+  playCatalogItem: mockPlayCatalogItem,
+}));
+
 vi.mock('../lib/api', () => ({
   api: mockApi,
   ApiError: class extends Error {
@@ -97,6 +103,7 @@ vi.mock('../stores', () => ({
 }));
 
 import { TvFocusProvider } from './nav/spatial';
+import { TvAlbumDetail } from './screens/TvAlbumDetail';
 import { TvDimOverlay } from './screens/TvDimOverlay';
 import { TvHome } from './screens/TvHome';
 import { TvLibrary } from './screens/TvLibrary';
@@ -273,7 +280,7 @@ describe('Smart TV screen journeys', () => {
     unmount();
   });
 
-  it('paginates albums beyond the first page via Load more albums in TvLibrary', async () => {
+  it('retains loaded album pages across unmount and remount in TvLibrary', async () => {
     const allAlbums = Array.from({ length: 135 }, (_, i) => ({
       id: `alb-${i + 1}`,
       title: `Album ${String(i + 1).padStart(3, '0')}`,
@@ -289,19 +296,83 @@ describe('Smart TV screen journeys', () => {
     });
     setLibraryTab('albums');
 
-    const { findByRole, queryByRole, findByText, queryByText } = render(() => (
+    const first = render(() => (
       <TvFocusProvider>
         <TvLibrary onNavigate={vi.fn()} />
       </TvFocusProvider>
     ));
 
-    expect(await findByText('Album 001')).toBeInTheDocument();
-    expect(queryByText('Album 125')).toBeNull();
+    expect(await first.findByText('Album 001')).toBeInTheDocument();
+    expect(first.queryByText('Album 125')).toBeNull();
 
-    const loadMoreBtn = await findByRole('button', { name: 'Load more albums' });
+    const loadMoreBtn = await first.findByRole('button', { name: 'Load more albums' });
     await fireEvent.click(loadMoreBtn);
 
-    expect(await findByText('Album 135')).toBeInTheDocument();
-    expect(queryByRole('button', { name: 'Load more albums' })).toBeNull();
+    expect(await first.findByText('Album 135')).toBeInTheDocument();
+    expect(first.queryByRole('button', { name: 'Load more albums' })).toBeNull();
+    expect(mockApi.getLibraryAlbums).toHaveBeenCalledTimes(2);
+    first.unmount();
+
+    const second = render(() => (
+      <TvFocusProvider>
+        <TvLibrary onNavigate={vi.fn()} />
+      </TvFocusProvider>
+    ));
+    expect(second.getByText('Album 135')).toBeInTheDocument();
+    expect(second.queryByRole('button', { name: 'Load more albums' })).toBeNull();
+    expect(mockApi.getLibraryAlbums).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves the full catalog tracklist in TvAlbumDetail even when a track exists locally', async () => {
+    mockScrollportLayout();
+    mockState.library = [
+      {
+        id: 'trk-local-1',
+        title: 'One More Time',
+        artist: 'Daft Punk',
+        album: 'Discovery',
+        album_artist: 'Daft Punk',
+        duration: 320,
+      },
+    ];
+    const catalogTracklist = [
+      { id: 'dz-1', type: 'track' as const, source: 'deezer', title: 'One More Time', artist: 'Daft Punk', album: 'Discovery', track_id: 'trk-local-1', duration: 320 },
+      { id: 'dz-2', type: 'track' as const, source: 'deezer', title: 'Aerodynamic', artist: 'Daft Punk', album: 'Discovery', duration: 212 },
+      { id: 'dz-3', type: 'track' as const, source: 'deezer', title: 'Digital Love', artist: 'Daft Punk', album: 'Discovery', duration: 301 },
+    ];
+    mockApi.getAlbumProfile.mockResolvedValue({
+      title: 'Discovery',
+      artist: 'Daft Punk',
+      tracklist: catalogTracklist,
+    });
+
+    const { findByText } = render(() => (
+      <TvFocusProvider>
+        <div data-tv-scroll-y="main">
+          <TvAlbumDetail
+            albumId="deezer:album:302127"
+            albumName="Discovery"
+            artist="Daft Punk"
+            deezerId="302127"
+            source="catalog"
+            onBack={vi.fn()}
+          />
+        </div>
+      </TvFocusProvider>
+    ));
+
+    expect(await findByText('One More Time')).toBeInTheDocument();
+    expect(await findByText('Aerodynamic')).toBeInTheDocument();
+    const thirdRow = await findByText('Digital Love');
+    expect(thirdRow).toBeInTheDocument();
+    expect(mockApi.getLibraryAlbum).not.toHaveBeenCalled();
+
+    await fireEvent.click(thirdRow);
+    expect(mockActions.playFrom).not.toHaveBeenCalled();
+    expect(mockPlayCatalogItem).toHaveBeenCalledWith(
+      catalogTracklist[2],
+      catalogTracklist,
+      expect.objectContaining({ id: 'album:deezer:album:302127', kind: 'album', label: 'Discovery' }),
+    );
   });
 });

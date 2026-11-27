@@ -299,6 +299,7 @@ export function TvSearch(props: TvSearchProps) {
                           name: item.title,
                           artist: item.artist || item.subtitle || '',
                           deezerId,
+                          source: 'catalog',
                         }),
                       )
                     }

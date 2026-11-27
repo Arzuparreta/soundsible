@@ -14,6 +14,23 @@ describe('TV hash router', () => {
       albumName: 'Café Bleu',
       artist: 'The Style Council',
       deezerId: '42',
+      source: 'library',
+    });
+
+    const catalogAlbumHash = albumTvHash({
+      id: 'deezer:album:42',
+      name: 'Discovery',
+      artist: 'Daft Punk',
+      deezerId: '42',
+      source: 'catalog',
+    });
+    expect(parseTvHash(catalogAlbumHash)).toMatchObject({
+      name: 'album',
+      albumId: 'deezer:album:42',
+      albumName: 'Discovery',
+      artist: 'Daft Punk',
+      deezerId: '42',
+      source: 'catalog',
     });
 
     const plHash = playlistTvHash('Night Drive 100%');

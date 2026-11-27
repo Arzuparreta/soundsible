@@ -501,7 +501,7 @@ test('TV remote capability declaration, single command handling across reconnect
   await expect(page.getByRole('heading', { name: 'Sign in on your TV' })).toBeVisible({ timeout: 8000 });
 });
 
-test('TV Library Albums paginates beyond the first page cleanly via Load more albums', async ({ page }, testInfo) => {
+test('TV Library Albums paginates beyond the first page and retains pages on Back from album detail', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes('mobile'), 'Smart TV runs on living-room viewports');
 
   const manyAlbumTracks: TrackSeed[] = Array.from({ length: 130 }, (_, i) => ({
@@ -528,6 +528,83 @@ test('TV Library Albums paginates beyond the first page cleanly via Load more al
   await expect(page.locator('[data-tv-id="lib-album-129"]')).toBeVisible();
   await expect(page.locator('[data-tv-id="lib-album-120"]')).toBeFocused();
   await expect(loadMore).toHaveCount(0);
+
+  // Open an album from the second page, then press Back: loaded pages and focus stay intact.
+  const album125 = page.locator('[data-tv-id="lib-album-125"]');
+  await album125.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Album 126' })).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-tv-id="lib-album-129"]')).toBeVisible();
+  await expect(page.locator('[data-tv-id="lib-album-125"]')).toBeFocused();
+  await expect(loadMore).toHaveCount(0);
+});
+
+test('catalog album opened from TV Search keeps full tracklist when a track exists locally', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes('mobile'), 'Smart TV runs on living-room viewports');
+
+  await setupTvSession(page, {
+    tracks: [
+      { id: 'trk-disc-1', title: 'One More Time', artist: 'Daft Punk', album: 'Discovery', album_id: 'alb-disc', duration: 320 },
+    ],
+  });
+
+  await page.route((u) => u.pathname === '/api/catalog/search', async (route) => {
+    await route.fulfill({
+      json: {
+        query: 'Discovery',
+        items: [
+          {
+            id: 'deezer:album:302127',
+            type: 'album',
+            source: 'deezer',
+            title: 'Discovery',
+            artist: 'Daft Punk',
+            external_ids: { deezer: '302127' },
+          },
+        ],
+        sections: [],
+      },
+    });
+  });
+
+  await page.route((u) => u.pathname === '/api/catalog/album', async (route) => {
+    await route.fulfill({
+      json: {
+        title: 'Discovery',
+        artist: 'Daft Punk',
+        tracklist: [
+          { id: 'dz-1', type: 'track', source: 'deezer', title: 'One More Time', artist: 'Daft Punk', album: 'Discovery', track_id: 'trk-disc-1', duration: 320 },
+          { id: 'dz-2', type: 'track', source: 'deezer', title: 'Aerodynamic', artist: 'Daft Punk', album: 'Discovery', duration: 212 },
+          { id: 'dz-3', type: 'track', source: 'deezer', title: 'Digital Love', artist: 'Daft Punk', album: 'Discovery', duration: 301 },
+        ],
+      },
+    });
+  });
+
+  let resolvedTitle = '';
+  await page.route((u) => u.pathname === '/api/catalog/resolve', async (route) => {
+    const body = route.request().postDataJSON() as { title?: string };
+    resolvedTitle = body.title ?? '';
+    await route.fulfill({ json: { video_id: 'yt-aerodynamic', item_id: 'item-aero' } });
+  });
+
+  await page.goto('/tv/#/search');
+  await page.locator('[data-tv-id="search-input"]').fill('Discovery');
+  await page.locator('[data-tv-id="search-submit"]').click();
+
+  const catAlbumCard = page.locator('[data-tv-id="search-cat-album-0"]');
+  await expect(catAlbumCard).toBeVisible();
+  await catAlbumCard.click();
+
+  await expect(page.getByText('One More Time')).toBeVisible();
+  await expect(page.getByText('Aerodynamic')).toBeVisible();
+  await expect(page.getByText('Digital Love')).toBeVisible();
+  await expect(page.getByText(/3 tracks/)).toBeVisible();
+
+  await page.getByText('Aerodynamic').click();
+  await expect.poll(() => resolvedTitle).toBe('Aerodynamic');
 });
 
 test('a track without album metadata is playable from Home and reachable in Library', async ({ page }, testInfo) => {

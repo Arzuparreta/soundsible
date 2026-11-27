@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, untrack } from 'solid-js';
 import { Control } from '../../design/Control';
 import { api } from '../../lib/api';
 import { trackCount } from '../../lib/format';
@@ -7,13 +7,24 @@ import { trackCoverUrl } from '../../lib/media';
 import { libraryContext } from '../../lib/playbackContext';
 import { playlistNames } from '../../lib/playlistOrder';
 import { actions, isPlayingTrack, musicLibrary, state } from '../../stores';
-import type { CatalogAlbum } from '../../types/music';
 import { TvCard } from '../components/TvCard';
 import { TvTrackRow } from '../components/TvTrackRow';
 import { TvVirtualList } from '../components/TvVirtualList';
 import { useTvFocus } from '../nav/spatial';
 import { albumTvHash, playlistTvHash } from '../nav/router';
-import { libraryTab, setLibraryTab, type TvLibraryTab } from '../state';
+import {
+  libraryAlbums,
+  libraryAlbumsHasMore,
+  libraryAlbumsNextOffset,
+  libraryAlbumsRevision,
+  libraryTab,
+  setLibraryAlbums,
+  setLibraryAlbumsHasMore,
+  setLibraryAlbumsNextOffset,
+  setLibraryAlbumsRevision,
+  setLibraryTab,
+  type TvLibraryTab,
+} from '../state';
 import {
   albumCoverUrl,
   buildTrackIndex,
@@ -30,17 +41,14 @@ export const TV_LIBRARY_ALBUM_PAGE_SIZE = 120;
 
 export function TvLibrary(props: TvLibraryProps) {
   const focus = useTvFocus();
-  const [albums, setAlbums] = createSignal<CatalogAlbum[]>([]);
-  const [hasMoreAlbums, setHasMoreAlbums] = createSignal(false);
   const [loadingMoreAlbums, setLoadingMoreAlbums] = createSignal(false);
-  const [nextAlbumOffset, setNextAlbumOffset] = createSignal(0);
 
   const trackIndex = createMemo(() => buildTrackIndex(musicLibrary(), state.library));
   const savedPlaylists = createMemo(() =>
     playlistNames(state.playlists, state.librarySettings.playlist_order),
   );
   const shownAlbums = createMemo(() =>
-    albums().length > 0 ? albums() : deriveAlbumsFromTracks(musicLibrary()),
+    libraryAlbums().length > 0 ? libraryAlbums() : deriveAlbumsFromTracks(musicLibrary()),
   );
   const songs = createMemo(() => musicLibrary());
 
@@ -48,35 +56,50 @@ export function TvLibrary(props: TvLibraryProps) {
     : savedPlaylists().length ? 'playlists' : songs().length ? 'songs' : 'albums');
 
   let disposed = false;
+  let loadGen = 0;
+  let requestedDepth = 0;
 
-  async function loadAlbumsPage(offset: number, focusFirstAppended = false): Promise<void> {
-    if (loadingMoreAlbums()) return;
+  onCleanup(() => {
+    disposed = true;
+  });
+
+  async function loadAlbumsPage(
+    offset: number,
+    opts?: { focusFirstAppended?: boolean; limit?: number; revision?: number },
+  ): Promise<void> {
+    const pageLimit = opts?.limit ?? TV_LIBRARY_ALBUM_PAGE_SIZE;
+    const gen = ++loadGen;
+    const targetRevision = opts?.revision ?? state.catalog.revision;
+    requestedDepth = Math.max(requestedDepth, offset + pageLimit);
     setLoadingMoreAlbums(true);
     try {
       const items = await api.getLibraryAlbums({
         sort: 'alphabeticalByName',
-        limit: TV_LIBRARY_ALBUM_PAGE_SIZE + 1,
+        limit: pageLimit + 1,
         offset,
       });
-      if (disposed) return;
-      const hasMore = items.length > TV_LIBRARY_ALBUM_PAGE_SIZE;
-      const page = hasMore ? items.slice(0, TV_LIBRARY_ALBUM_PAGE_SIZE) : items;
+      if (disposed || gen !== loadGen) return;
+      const hasMore = items.length > pageLimit;
+      const page = hasMore ? items.slice(0, pageLimit) : items;
       let appendedStartIndex = 0;
       let totalAfter = page.length;
-      if (offset === 0) {
-        setAlbums(page);
-      } else {
-        setAlbums((prev) => {
-          appendedStartIndex = prev.length;
-          const seen = new Set(prev.map((a) => a.id));
-          const merged = [...prev, ...page.filter((a) => !seen.has(a.id))];
-          totalAfter = merged.length;
-          return merged;
-        });
-      }
-      setNextAlbumOffset(offset + page.length);
-      setHasMoreAlbums(hasMore);
-      if (focusFirstAppended && appendedStartIndex < totalAfter) {
+      batch(() => {
+        if (offset === 0) {
+          setLibraryAlbums(page);
+        } else {
+          setLibraryAlbums((prev) => {
+            appendedStartIndex = prev.length;
+            const seen = new Set(prev.map((a) => a.id));
+            const merged = [...prev, ...page.filter((a) => !seen.has(a.id))];
+            totalAfter = merged.length;
+            return merged;
+          });
+        }
+        setLibraryAlbumsNextOffset(offset + page.length);
+        setLibraryAlbumsHasMore(hasMore);
+        setLibraryAlbumsRevision(targetRevision);
+      });
+      if (opts?.focusFirstAppended && appendedStartIndex < totalAfter) {
         queueMicrotask(() => {
           focus.focusById(`lib-album-${appendedStartIndex}`);
         });
@@ -84,18 +107,27 @@ export function TvLibrary(props: TvLibraryProps) {
     } catch {
       // Fall back to locally derived albums from musicLibrary when unreachable.
     } finally {
-      if (!disposed) {
+      if (!disposed && gen === loadGen) {
         setLoadingMoreAlbums(false);
       }
     }
   }
 
-  onMount(() => {
-    void loadAlbumsPage(0);
-    onCleanup(() => {
-      disposed = true;
-    });
+  createEffect(() => {
+    const rev = state.catalog.revision;
+    if (untrack(libraryAlbumsRevision) === rev) return;
+    const preserveCount = Math.max(
+      TV_LIBRARY_ALBUM_PAGE_SIZE,
+      untrack(libraryAlbumsNextOffset),
+      requestedDepth,
+    );
+    void loadAlbumsPage(0, { limit: preserveCount, revision: rev });
   });
+
+  function loadNextAlbumsPage(): void {
+    if (loadingMoreAlbums()) return;
+    void loadAlbumsPage(libraryAlbumsNextOffset(), { focusFirstAppended: true });
+  }
 
   function selectTab(next: TvLibraryTab): void {
     setLibraryTab(next);
@@ -209,7 +241,7 @@ export function TvLibrary(props: TvLibraryProps) {
               }}
             </For>
           </div>
-          <Show when={hasMoreAlbums()}>
+          <Show when={libraryAlbumsHasMore()}>
             <div
               class={styles.tvRowGroup}
               data-tv-group-container="lib-albums-more"
@@ -224,7 +256,7 @@ export function TvLibrary(props: TvLibraryProps) {
                 class={styles.tvSecondaryBtn}
                 classList={{ [styles.tvFocusTarget]: true }}
                 disabled={loadingMoreAlbums()}
-                onClick={() => void loadAlbumsPage(nextAlbumOffset(), true)}
+                onClick={loadNextAlbumsPage}
               >
                 {loadingMoreAlbums() ? t('tv.library.loadingMoreAlbums') : t('tv.library.loadMoreAlbums')}
               </Control>

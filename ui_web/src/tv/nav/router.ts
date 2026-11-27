@@ -13,6 +13,7 @@ export type TvRoute =
       albumName: string;
       artist: string;
       deezerId?: string;
+      source: 'library' | 'catalog';
     }
   | { name: 'playlist'; hash: string; playlistName: string };
 
@@ -53,6 +54,7 @@ export function parseTvHash(rawHash: string): TvRoute {
       albumName: query.get('name') || decoded,
       artist: query.get('artist') || '',
       deezerId: query.get('deezer_id') || undefined,
+      source: query.get('source') === 'catalog' ? 'catalog' : 'library',
     };
   }
 
@@ -81,11 +83,13 @@ export function albumTvHash(opts: {
   name?: string;
   artist?: string;
   deezerId?: string;
+  source?: 'library' | 'catalog';
 }): string {
   const params = new URLSearchParams();
   if (opts.name) params.set('name', opts.name);
   if (opts.artist) params.set('artist', opts.artist);
   if (opts.deezerId) params.set('deezer_id', opts.deezerId);
+  if (opts.source === 'catalog') params.set('source', 'catalog');
   const qs = params.toString();
   return `#/album/${encodeURIComponent(opts.id)}${qs ? `?${qs}` : ''}`;
 }
