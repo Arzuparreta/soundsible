@@ -1,6 +1,6 @@
 import { desktopBridge } from './desktopBridge';
 
-export type DeviceFormFactor = 'phone' | 'tablet' | 'computer';
+export type DeviceFormFactor = 'phone' | 'tablet' | 'computer' | 'tv';
 
 /** Every command the web target executor implements and declares on registration. */
 export const WEB_REMOTE_COMMANDS = [
@@ -38,12 +38,27 @@ export const WEB_REMOTE_COMMANDS = [
 
 export type WebRemoteCommand = (typeof WEB_REMOTE_COMMANDS)[number];
 
+const TV_EXCLUDED_COMMANDS = new Set<string>([
+  'transport.set_volume',
+  'transport.set_muted',
+  'radio.start',
+  'radio.stop',
+]);
+
+/** Reduced remote command subset declared and accepted on the Smart TV surface. */
+export const TV_REMOTE_COMMANDS = WEB_REMOTE_COMMANDS.filter(
+  (command) => !command.startsWith('dj.') && !TV_EXCLUDED_COMMANDS.has(command),
+);
+
+export type TvRemoteCommand = (typeof TV_REMOTE_COMMANDS)[number];
+
 export interface DeviceEnvironment {
   userAgent: string;
   maxTouchPoints: number;
   coarsePointer: boolean;
   shortSide: number;
   desktop: boolean;
+  tv?: boolean;
 }
 
 function hasOwnerToken(): boolean {
@@ -51,6 +66,17 @@ function hasOwnerToken(): boolean {
   if (runtimeWindow.__SOUNDSIBLE_OWNER_TOKEN__?.trim()) return true;
   if (typeof document === 'undefined') return false;
   return Boolean(document.querySelector('meta[name="soundsible-owner-token"]')?.getAttribute('content')?.trim());
+}
+
+export function isTvShell(): boolean {
+  if (typeof document !== 'undefined' && document.documentElement?.dataset?.surface === 'tv') {
+    return true;
+  }
+  if (typeof window !== 'undefined') {
+    const path = window.location?.pathname || '';
+    return path === '/tv' || path.startsWith('/tv/');
+  }
+  return false;
 }
 
 export function isDesktopShell(): boolean {
@@ -78,7 +104,7 @@ function readEnvironment(): DeviceEnvironment {
       shortSide = Math.min(window.innerWidth, window.innerHeight);
     }
   }
-  return { userAgent: ua, maxTouchPoints, coarsePointer, shortSide, desktop: isDesktopShell() };
+  return { userAgent: ua, maxTouchPoints, coarsePointer, shortSide, desktop: isDesktopShell(), tv: isTvShell() };
 }
 
 function detectBrowser(ua: string): string | null {
@@ -103,6 +129,7 @@ function detectPlatform(ua: string, maxTouchPoints: number): string | null {
 }
 
 export function detectFormFactor(env: DeviceEnvironment = readEnvironment()): DeviceFormFactor {
+  if (env.tv) return 'tv';
   if (env.desktop) return 'computer';
   if (env.coarsePointer) return env.shortSide < 600 ? 'phone' : 'tablet';
   if (/Macintosh|Mac OS X/i.test(env.userAgent) && env.maxTouchPoints > 1) return 'tablet';
@@ -110,10 +137,19 @@ export function detectFormFactor(env: DeviceEnvironment = readEnvironment()): De
 }
 
 export function isTouchFormFactor(): boolean {
-  return detectFormFactor() !== 'computer';
+  const formFactor = detectFormFactor();
+  return formFactor === 'phone' || formFactor === 'tablet';
+}
+
+function detectTvDeviceName(ua: string): string {
+  if (/Web0S|webOS/i.test(ua)) return 'LG webOS TV';
+  if (/Tizen/i.test(ua)) return 'Samsung TV';
+  if (/Android/i.test(ua)) return 'Android TV';
+  return 'Smart TV';
 }
 
 export function detectDeviceName(env: DeviceEnvironment = readEnvironment()): string {
+  if (env.tv) return detectTvDeviceName(env.userAgent);
   const app = env.desktop ? 'Soundsible' : detectBrowser(env.userAgent);
   const platform = detectPlatform(env.userAgent, env.maxTouchPoints);
   if (app && platform) return `${app} · ${platform}`;

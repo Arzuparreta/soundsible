@@ -369,6 +369,8 @@ jobs:
           docker compose up --detach --wait --wait-timeout 120
           curl --fail --silent http://127.0.0.1:15005/api/health | grep '"status":"healthy"'
           curl --fail --silent --output /dev/null http://127.0.0.1:15005/player/
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:15005/tv)" = "308"
+          curl --fail --silent --output /dev/null http://127.0.0.1:15005/tv/
           test "$(docker compose exec --no-TTY soundsible id --user)" = "1000"
           config_digest=$(docker compose exec --no-TTY soundsible sha256sum /config/config.json | cut --delimiter=' ' --fields=1)
           docker compose up --detach --force-recreate --wait --wait-timeout 120

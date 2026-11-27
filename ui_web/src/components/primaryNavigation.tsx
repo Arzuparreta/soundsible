@@ -1,6 +1,6 @@
 import type { JSX } from 'solid-js';
 import { t } from '../lib/i18n';
-import { DownloadIcon, menuIcons } from './icons';
+import { DownloadIcon, HomeIcon, menuIcons, NavigationSearchIcon } from './icons';
 
 export interface PrimaryNavItem {
   href: string;
@@ -13,17 +13,12 @@ export interface PrimaryNavItem {
 export const primaryNavigation: PrimaryNavItem[] = [
   {
     href: '/', label: () => t('nav.home'), end: true,
-    icon: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" /></svg>,
+    icon: HomeIcon,
   },
   {
     href: '/search',
     label: () => t('nav.search'),
-    icon: () => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" />
-        <path d="M21 21l-4.3-4.3" />
-      </svg>
-    ),
+    icon: NavigationSearchIcon,
   },
   {
     href: '/live',

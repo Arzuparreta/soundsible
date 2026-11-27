@@ -29,6 +29,7 @@ from shared.db.media_cache import MediaCache
 from shared.db.lyrics import LyricsStore
 from shared.db.accounts import AccountStore
 from shared.db.pairing import PairingStore
+from shared.db.tv_auth import TvAuthStore
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ INSTANCE_TABLES = (
     "agent_tokens",
     "subsonic_credentials",
     "pairing_sessions",
+    "tv_auth_requests",
     "youtube_resolution_cache",
     "related_mix_cache",
     "stream_url_cache",
@@ -163,6 +165,7 @@ class DatabaseManager(
     LyricsStore,
     AccountStore,
     PairingStore,
+    TvAuthStore,
 ):
     """One SQLite database file: a user's library index or the instance database.
 

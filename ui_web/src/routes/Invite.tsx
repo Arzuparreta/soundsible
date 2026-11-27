@@ -1,5 +1,6 @@
 import { Match, Show, Switch, createResource, createSignal } from 'solid-js';
 import Button from '../components/Button';
+import { BrandIcon } from '../components/BrandIcon';
 import PasswordFields from '../components/PasswordFields';
 import { t } from '../lib/i18n';
 import { invites } from '../lib/session';
@@ -44,7 +45,7 @@ export default function Invite(props: { token: string }) {
       <div class={styles.card}>
         <AccessibilityButton class={styles.accessibilityButton} />
         <div class={styles.brand}>
-          <img class={styles.mark} src="/player/branding/logo-app.png" alt="" />
+          <BrandIcon class={styles.mark} />
           <Switch>
             <Match when={preview.loading}>
               <h1 class={styles.title}>{t('common.loading')}</h1>

@@ -857,3 +857,80 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Smart TV 10-foot tokens (1920x1080 baseline, Chromium 108 safe) ── */
+:root[data-surface='tv'] {
+  color-scheme: dark;
+  --tv-u: clamp(0.6667px, min(calc(100vw / 1920), calc(100vh / 1080)), 1.5px);
+
+  --tv-font-hero: calc(72 * var(--tv-u));
+  --tv-font-title: calc(44 * var(--tv-u));
+  --tv-font-heading: calc(36 * var(--tv-u));
+  --tv-font-body: calc(32 * var(--tv-u));
+  --tv-font-sub: calc(26 * var(--tv-u));
+  --tv-font-caption: calc(22 * var(--tv-u));
+
+  --tv-control-min-h: calc(64 * var(--tv-u));
+
+  --tv-gap-xs: calc(12 * var(--tv-u));
+  --tv-gap-sm: calc(20 * var(--tv-u));
+  --tv-gap-md: calc(28 * var(--tv-u));
+  --tv-gap-lg: calc(40 * var(--tv-u));
+  --tv-gap-xl: calc(56 * var(--tv-u));
+
+  --tv-radius-sm: calc(12 * var(--tv-u));
+  --tv-radius-md: calc(18 * var(--tv-u));
+  --tv-radius-lg: calc(26 * var(--tv-u));
+  --tv-radius-pill: 999px;
+
+  --tv-rail-w: calc(280 * var(--tv-u));
+  --tv-rail-collapsed-w: calc(108 * var(--tv-u));
+  --tv-card-w: calc(254 * var(--tv-u));
+  --tv-card-art: calc(244 * var(--tv-u));
+  --tv-hero-art: calc(296 * var(--tv-u));
+  --tv-row-h: calc(90 * var(--tv-u));
+  --tv-row-art: calc(64 * var(--tv-u));
+  --tv-qr-size: calc(280 * var(--tv-u));
+  --tv-seek-h: calc(8 * var(--tv-u));
+  --tv-max-form-w: calc(920 * var(--tv-u));
+  --tv-modal-w: calc(880 * var(--tv-u));
+
+  --tv-bg: var(--bg-base);
+  --tv-surface: #19191d;
+  --tv-surface-raised: #252529;
+  --tv-surface-focus: #353538;
+  --tv-surface-selected: #2c2926;
+  --tv-surface-playing: rgba(249, 122, 18, 0.16);
+  --tv-scrim: rgba(7, 8, 12, 0.88);
+  --tv-dim-bg: #040406;
+
+  --tv-ink: var(--ink-primary);
+  --tv-ink-muted: var(--ink-secondary);
+  --tv-ink-subtle: #8b90a0;
+  --tv-accent: var(--accent);
+  --tv-accent-ink: var(--accent-ink);
+  --tv-on-accent: #170c02;
+  --tv-danger: #ff5b52;
+  --tv-success: #38d162;
+  --tv-border: rgba(255, 255, 255, 0.14);
+  --tv-border-strong: rgba(255, 255, 255, 0.34);
+
+  /* Dual high-contrast outline + dark halo remains crisp over white or black art. */
+  --tv-focus-border: #ffffff;
+  --tv-focus-ring-shadow: 0 0 0 calc(3 * var(--tv-u)) var(--tv-bg), 0 0 0 calc(7 * var(--tv-u)) var(--tv-focus-border);
+  --tv-feature-wash: linear-gradient(100deg, var(--tv-surface) 8%, rgba(17, 17, 21, 0.85) 44%, transparent);
+  --tv-player-wash: linear-gradient(120deg, transparent, rgba(12, 12, 14, 0.86) 80%);
+  --tv-record: repeating-radial-gradient(circle, transparent 0 3px, rgba(255, 255, 255, 0.07) 4px, transparent 5px),
+    conic-gradient(from 5deg, #181819, #48474b 48deg, #151518 96deg, #101012 175deg, #555457 220deg, #181819 275deg);
+  --tv-artwork-grooves: radial-gradient(circle, transparent 0 4%, rgba(0, 0, 0, 0.35) 4.5% 22%, transparent 23%),
+    repeating-radial-gradient(circle, rgba(255, 255, 255, 0.07) 0 1px, rgba(0, 0, 0, 0.12) 2px 5px);
+  --tv-queue-scrim: rgba(0, 0, 0, 0.58);
+  --tv-card-shadow: 0 calc(12 * var(--tv-u)) calc(28 * var(--tv-u)) rgba(0, 0, 0, 0.5);
+  --tv-dur-focus: 140ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-surface='tv'] {
+    --tv-dur-focus: 0ms;
+  }
+}

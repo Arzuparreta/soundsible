@@ -23,3 +23,9 @@ export function ColorControl(props: Omit<JSX.InputHTMLAttributes<HTMLInputElemen
 export function TextControl(props: Omit<JSX.InputHTMLAttributes<HTMLInputElement>, 'type'>) {
   return <input {...props} type="text" />;
 }
+
+/** Input primitive preserving caller `type` (`search`, `password`, `text`). */
+export function InputControl(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
+  const [local, rest] = splitProps(props, ['type']);
+  return <input {...rest} type={local.type ?? 'text'} />;
+}

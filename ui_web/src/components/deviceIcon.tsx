@@ -1,7 +1,14 @@
 import type { JSX } from 'solid-js';
 
-/** A device's form factor as an icon: computer, tablet or phone. */
+/** A device's form factor as an icon: tv, computer, tablet or phone. */
 export function deviceIcon(formFactor?: string, type?: string): JSX.Element {
+  if (formFactor === 'tv')
+    return (
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="2" y="4" width="20" height="14" rx="2" />
+        <path d="M7 21h10" />
+      </svg>
+    );
   if (formFactor === 'computer' || (!formFactor && type === 'desktop'))
     return (
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

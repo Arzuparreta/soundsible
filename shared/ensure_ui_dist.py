@@ -24,6 +24,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_UI_WEB = _REPO_ROOT / "ui_web"
 _INPUT_FILES = (
     "index.html",
+    "tv.html",
     "package.json",
     "package-lock.json",
     "vite.config.js",
@@ -79,14 +80,27 @@ def _input_signature(root: Path):
     return digest.hexdigest(), newest
 
 
+def _required_outputs(root: Path) -> tuple[str, ...]:
+    """Require ``tv.html`` in dist whenever the source tree declares it."""
+    if (root / "tv.html").is_file():
+        return ("index.html", "tv.html")
+    return ("index.html",)
+
+
+def _bundle_signature(output_stats: list[os.stat_result]) -> list:
+    if len(output_stats) == 1:
+        return [output_stats[0].st_mtime_ns, output_stats[0].st_size]
+    return [[st.st_mtime_ns, st.st_size] for st in output_stats]
+
+
 def ui_dist_is_stale(ui_web: Path | None = None) -> bool:
-    """True when ``dist/index.html`` is missing or older than UI sources."""
+    """True when ``dist/`` outputs are missing or older than UI sources."""
     root = ui_web or _DEFAULT_UI_WEB
-    dist_index = root / "dist" / "index.html"
-    if not dist_index.is_file():
+    outputs = [root / "dist" / name for name in _required_outputs(root)]
+    if not all(path.is_file() for path in outputs):
         return True
     try:
-        dist_stat = dist_index.stat()
+        output_stats = [path.stat() for path in outputs]
         signature, newest = _input_signature(root)
     except OSError:
         return True
@@ -94,8 +108,8 @@ def ui_dist_is_stale(ui_web: Path | None = None) -> bool:
         recorded = json.loads((root / 'dist' / _INPUT_MANIFEST).read_text())
     except (OSError, ValueError):
         # Bundles built before input manifests retain the mtime contract.
-        return newest > dist_stat.st_mtime_ns
-    return recorded != {'inputs': signature, 'bundle': [dist_stat.st_mtime_ns, dist_stat.st_size]}
+        return newest > min(st.st_mtime_ns for st in output_stats)
+    return recorded != {'inputs': signature, 'bundle': _bundle_signature(output_stats)}
 
 
 def ensure_ui_dist(
@@ -113,7 +127,7 @@ def ensure_ui_dist(
     """
     if _truthy_env("SOUNDSIBLE_SKIP_UI_BUILD"):
         root = ui_web or _DEFAULT_UI_WEB
-        return (root / "dist" / "index.html").is_file()
+        return all((root / "dist" / name).is_file() for name in _required_outputs(root))
 
     if skip_external_dist:
         external = external_dist
@@ -125,6 +139,7 @@ def ensure_ui_dist(
             return True
 
     root = (ui_web or _DEFAULT_UI_WEB).resolve()
+    required = _required_outputs(root)
     dist_index = root / "dist" / "index.html"
 
     with _LOCK:
@@ -174,17 +189,19 @@ def ensure_ui_dist(
             logger.error("ui_web vite build failed (exit %s):\n%s", result.returncode, tail)
             return dist_index.is_file()
 
-        if not dist_index.is_file():
-            logger.error("ui_web vite build finished but dist/index.html is still missing")
+        outputs = [root / "dist" / name for name in required]
+        missing = [path.name for path in outputs if not path.is_file()]
+        if missing:
+            logger.error("ui_web vite build finished but dist outputs are still missing: %s", ", ".join(missing))
             return False
 
         try:
             # Record the inputs seen BEFORE building. An edit during the build
             # therefore stays stale on the next render instead of being hidden.
             from shared.atomic_file import publish, text_pieces
-            built = dist_index.stat()
+            output_stats = [path.stat() for path in outputs]
             publish(root / 'dist' / _INPUT_MANIFEST, text_pieces([json.dumps({
-                'inputs': signature, 'bundle': [built.st_mtime_ns, built.st_size]})]))
+                'inputs': signature, 'bundle': _bundle_signature(output_stats)})]))
         except OSError:
             logger.warning('Could not record UI build inputs', exc_info=True)
 

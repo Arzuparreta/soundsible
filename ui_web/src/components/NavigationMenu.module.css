@@ -89,6 +89,7 @@
   min-height: var(--control-h);
   padding: var(--space-2xs) var(--space-md);
   border: 1px solid transparent;
+  background: transparent;
   border-radius: var(--radius-sm);
   color: var(--ink-secondary);
   font-size: var(--text-body);

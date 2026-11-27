@@ -10,3 +10,13 @@ export function collectionIndex(tracks: readonly Track[]): Map<string, Track> {
   for (const track of tracks) if (!index.has(track.id)) index.set(track.id, track);
   return index;
 }
+
+/** Keep membership order and repeated occurrences, even when a source is missing. */
+export function resolveCollectionTracks(ids: readonly string[], index: ReadonlyMap<string, Track>): Track[] {
+  const tracks: Track[] = [];
+  for (const id of ids) {
+    const track = index.get(id);
+    if (track) tracks.push(track);
+  }
+  return tracks;
+}

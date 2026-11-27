@@ -1,4 +1,5 @@
 import { createSignal, Show, type JSX } from 'solid-js';
+import { EntityIdentity } from '../design/EntityIdentity';
 import { Control } from '../design/Control';
 import { useAppBar } from '../lib/appBar';
 import { coverGradient } from '../lib/cover';
@@ -39,15 +40,16 @@ export function EntityHero(props: {
     </Show>
     <div class={hero.hero} classList={{ [hero.compact]: props.variant === 'compact', [hero.podcast]: props.variant === 'podcast', [hero.hasCorner]: Boolean(props.corner) }}>
       {props.art}
-      <div class={hero.identity}>
-        <h1 ref={setHeading} class={hero.title}>
-          <Show when={props.openMenu} fallback={props.name}>
+      <EntityIdentity
+        class={hero.identity}
+        headingClass={hero.title}
+        headingRef={setHeading}
+        title={<Show when={props.openMenu} fallback={props.name}>
             <Control type="button" class={hero.titleButton} data-testid="collection-header-name"
               aria-haspopup="dialog" title={t('savedEntities.options')} {...tap} onContextMenu={context}>{props.name}</Control>
-          </Show>
-        </h1>
-        {props.metadata}
-      </div>
+        </Show>}
+        metadata={props.metadata}
+      />
       <Show when={props.corner}><div class={hero.corner}>{props.corner}</div></Show>
       {props.children}
     </div>
