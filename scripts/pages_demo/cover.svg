@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#283e48"/>
+  <circle cx="245" cy="145" r="91" fill="#e8a677"/>
+  <path d="M0 210L400 134V169L0 245ZM0 266L400 190V202L0 279ZM0 308L400 232V237L0 313Z" fill="#b9d8cb"/>
+  <text x="28" y="365" font-family="sans-serif" font-size="29" fill="white">STATION STUDIES</text>
+</svg>

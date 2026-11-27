@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Soundsible demo</title>
+<body style="background:#101014;color:#eee;font:1rem system-ui">
+<main><h1>Soundsible</h1><p id="status" role="status">Opening Soundsible…</p></main>
+<script type="module">
+try {
+  await navigator.serviceWorker.register('./demo-worker.js');
+  await navigator.serviceWorker.ready;
+  location.replace(new URL('player.html#/library?view=songs', location.href));
+} catch {
+  document.querySelector('#status').textContent = 'This demo needs service workers. Open it over HTTPS or localhost.';
+}
+</script></body></html>
