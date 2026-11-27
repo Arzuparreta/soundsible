@@ -1045,32 +1045,31 @@ def update_playlist(name):
     proposed_ids = data.get("track_ids", metadata.playlists[name])
     if not isinstance(proposed_ids, list) or not all(isinstance(value, str) for value in proposed_ids):
         return jsonify(error="track_ids must be a string list"), 400
-    if "name" in data and (not isinstance(data["name"], str) or not data["name"].strip()):
-        return jsonify(error="name cannot be empty"), 400
+    new_name = None
+    if "name" in data:
+        value = data["name"]
+        if not isinstance(value, str) or not (new_name := value.strip()):
+            return jsonify(error="name cannot be empty"), 400
+
+    cover_tid = None
     if "cover_track_id" in data:
         cover = data["cover_track_id"]
-        if cover is not None and (not isinstance(cover, str) or (cover.strip() and cover.strip() not in proposed_ids)):
+        if cover is not None and not isinstance(cover, str):
             return jsonify(error="Invalid cover_track_id (not in playlist)"), 400
+        cover_tid = (cover or "").strip() or None
+        if cover_tid is not None and cover_tid not in proposed_ids:
+            return jsonify(error="Invalid cover_track_id (not in playlist)"), 400
+
     metadata = metadata.copy_for_playlist_edit()
-    if "name" in data:
-        new_name = (data.get("name") or "").strip()
-        if not new_name:
-            return jsonify({"error": "name cannot be empty"}), 400
+    if new_name is not None:
         if not metadata.rename_playlist(name, new_name):
             return jsonify({"error": "Rename failed (new name may already exist)"}), 409
         name = new_name
     if "track_ids" in data:
-        track_ids = data.get("track_ids")
-        if not isinstance(track_ids, list):
-            return jsonify({"error": "track_ids must be a list"}), 400
-        metadata.set_playlist_tracks(name, list(track_ids))
+        metadata.set_playlist_tracks(name, proposed_ids)
     if "cover_track_id" in data:
-        raw_cover = data.get("cover_track_id")
-        if raw_cover is not None and not isinstance(raw_cover, str):
-            return jsonify({"error": "cover_track_id must be a string or null"}), 400
-        cover_tid = (raw_cover or "").strip() or None
         if not metadata.set_playlist_cover_track_id(name, cover_tid):
-            return jsonify({"error": "Invalid cover_track_id (not in playlist)"}), 400
+            return jsonify(error="Invalid cover_track_id (not in playlist)"), 400
     return _commit_playlists(api, lib, metadata)
 
 

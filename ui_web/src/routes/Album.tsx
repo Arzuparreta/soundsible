@@ -14,16 +14,15 @@ import { musicLibrary, isPlayingItem, state } from '../stores';
 import { player } from '../stores/player';
 import { api } from '../lib/api';
 import { coverUrl, hasCoverArt, trackCoverUrl } from '../lib/media';
-import { catalogItemKeys } from '../lib/playbackIdentity';
+import { createCatalogDownload } from '../lib/catalogDownload';
 import { trackCount } from '../lib/format';
 import { formatReleaseDate, formatTotalDuration } from '../lib/releaseFormat';
 import { shuffled } from '../lib/shuffle';
-import { toast } from '../lib/toast';
 import { albumPath, artistKey, artistPath, decodeArtistName, parseViewParams } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { AlbumProfile, AlbumSummary, CatalogAlbum, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
-import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
+import { useCatalogCollection, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import { startDjFromCatalog, startDjFromTracks } from '../lib/djStart';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Album.module.css';
@@ -52,8 +51,6 @@ export default function Album() {
   const title = createMemo(() => decodeArtistName(params.name));
   const viewParams = createMemo(() => parseViewParams(searchParams as Record<string, string | undefined>));
   const artistName = createMemo(() => (searchParams as Record<string, string | undefined>).artist || '');
-
-  const [saving, setSaving] = createSignal<Set<string>>(new Set());
 
   let aborter: AbortController | undefined;
 
@@ -258,39 +255,7 @@ export default function Album() {
     };
   };
 
-  const saveItem = async (item: CatalogItem) => {
-    const artist = itemArtist(item);
-    if (!artist || !item.title) return;
-    setSaving((s) => new Set(s).add(item.id));
-    try {
-      const response = await api.saveCatalogItem({
-        catalog_item_id: item.id,
-        source: item.source,
-        artist,
-        title: item.title,
-        duration: item.duration,
-        cover: item.cover,
-        external_ids: item.external_ids,
-        identity_keys: catalogItemKeys(item),
-        ...albumEvidence(item),
-      });
-      if (response.status === 'queued') {
-        toast.success(t('search.addedToDownloads'));
-      } else if (response.status === 'needs_review') {
-        toast.info(t('search.chooseVersion'));
-      } else {
-        toast.error(t('search.notSaved'));
-      }
-    } catch {
-      toast.error(t('search.notSaved'));
-    } finally {
-      setSaving((s) => {
-        const next = new Set(s);
-        next.delete(item.id);
-        return next;
-      });
-    }
-  };
+  const { saving, saveItem } = createCatalogDownload(albumEvidence);
 
   const switchView = (mode: ViewMode) => {
     setSearchParams({ view: mode }, { replace: true });

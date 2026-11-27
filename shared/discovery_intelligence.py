@@ -9,7 +9,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 from shared.podcast_regions import valid_podcast_country
 from shared import request_scope
@@ -592,6 +592,23 @@ def _storage_aliases(identity: str, media_type: str, payload: dict[str, Any]) ->
     return list(dict.fromkeys(alias for alias in aliases if alias))
 
 
+def _music_identities(payload: dict[str, Any]) -> Iterator[str]:
+    external_ids = payload.get("external_ids") if isinstance(payload.get("external_ids"), dict) else {}
+    for key, prefix in (
+        ("youtube_id", "music:youtube"),
+        ("track_id", "music:track"),
+        ("isrc", "music:isrc"),
+        ("deezer_id", "music:deezer"),
+        ("mbid", "music:mbid"),
+    ):
+        raw_val = payload.get(key) or external_ids.get(key)
+        if not raw_val and key == "mbid":
+            raw_val = payload.get("musicbrainz_id") or external_ids.get("musicbrainz_id")
+        value = _clean_str(raw_val, 160)
+        if value:
+            yield f"{prefix}:{_norm(value)}"
+
+
 def canonical_identity(payload: dict[str, Any]) -> tuple[str, str]:
     """Stable, local identity for one exact track, artist, episode, or show."""
     media_type = _clean_str(payload.get("media_type"), 40)
@@ -618,20 +635,9 @@ def canonical_identity(payload: dict[str, Any]) -> tuple[str, str]:
             "podcast_show",
         )
 
-    external_ids = payload.get("external_ids") if isinstance(payload.get("external_ids"), dict) else {}
-    for key, prefix in (
-        ("youtube_id", "music:youtube"),
-        ("track_id", "music:track"),
-        ("isrc", "music:isrc"),
-        ("deezer_id", "music:deezer"),
-        ("mbid", "music:mbid"),
-    ):
-        raw_val = payload.get(key) or external_ids.get(key)
-        if not raw_val and key == "mbid":
-            raw_val = payload.get("musicbrainz_id") or external_ids.get("musicbrainz_id")
-        value = _clean_str(raw_val, 160)
-        if value:
-            return f"{prefix}:{_norm(value)}", "music_track"
+    primary = next(_music_identities(payload), None)
+    if primary is not None:
+        return primary, "music_track"
     artist_name, _ = _extract_artist_fields(payload)
     return (
         f"music:meta:{fold_text(artist_name)}\x00{fold_text(payload.get('title'))}",
@@ -660,21 +666,7 @@ def identity_aliases(payload: dict[str, Any]) -> list[str]:
             aliases.append(f"podcast:show:{_norm(itunes_id)}")
         return list(dict.fromkeys(aliases))
 
-    external_ids = payload.get("external_ids") if isinstance(payload.get("external_ids"), dict) else {}
-    aliases: list[str] = []
-    for key, prefix in (
-        ("youtube_id", "music:youtube"),
-        ("track_id", "music:track"),
-        ("isrc", "music:isrc"),
-        ("deezer_id", "music:deezer"),
-        ("mbid", "music:mbid"),
-    ):
-        raw_val = payload.get(key) or external_ids.get(key)
-        if not raw_val and key == "mbid":
-            raw_val = payload.get("musicbrainz_id") or external_ids.get("musicbrainz_id")
-        value = _clean_str(raw_val, 160)
-        if value:
-            aliases.append(f"{prefix}:{_norm(value)}")
+    aliases = list(_music_identities(payload))
     artist_name, _ = _extract_artist_fields(payload)
     artist_folded = fold_text(artist_name)
     title_folded = fold_text(payload.get("title"))

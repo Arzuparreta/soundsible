@@ -11,6 +11,7 @@ import {
 import { openActionMenu } from './ActionMenu';
 import { SeamReset } from './SeamReset';
 import { playerCompact } from '../lib/playerDock';
+import { animateLayoutRects, captureLayoutRects } from '../lib/layoutMotion';
 import { prefersReducedMotion } from '../lib/prefersReducedMotion';
 import { t } from '../lib/i18n';
 import { dropTarget } from '../lib/dragReorder';
@@ -244,38 +245,12 @@ export function PlayerWorkspace<PanelId extends string>(props: {
     });
   });
 
-  const captureRects = () => new Map(
-    [...(rootEl?.querySelectorAll<HTMLElement>('[data-player-tile]') ?? [])]
-      .map((element) => [element, element.getBoundingClientRect()] as const),
-  );
-
-  const animateLayout = (before: Map<Element, DOMRect>) => {
-    if (prefersReducedMotion()) return;
-    requestAnimationFrame(() => {
-      for (const element of rootEl?.querySelectorAll<HTMLElement>('[data-player-tile]') ?? []) {
-        const first = before.get(element);
-        const last = element.getBoundingClientRect();
-        if (!first || !last.width || !last.height) continue;
-        const dx = first.left - last.left;
-        const dy = first.top - last.top;
-        const sx = first.width / last.width;
-        const sy = first.height / last.height;
-        if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) continue;
-        element.animate(
-          [
-            { transformOrigin: 'top left', transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
-            { transformOrigin: 'top left', transform: 'none' },
-          ],
-          { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' },
-        );
-      }
-    });
-  };
+  const layoutElements = () => rootEl?.querySelectorAll<HTMLElement>('[data-player-tile]') ?? [];
 
   const updateLayout = (next: PlayerPanelLayout<PanelId>) => {
-    const before = captureRects();
+    const before = captureLayoutRects(layoutElements());
     props.onLayoutChange(next);
-    animateLayout(before);
+    animateLayoutRects(before, layoutElements);
   };
 
   const resetLayout = () => {

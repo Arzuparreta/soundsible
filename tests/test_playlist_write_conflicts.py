@@ -369,6 +369,29 @@ def test_invalid_combined_edit_does_not_partly_rename_shared_metadata(client):
     assert client.get("/api/library").get_json()["playlists"] == {"Arma Reforger": ["tunnel"]}
 
 
+def test_combined_edit_validates_the_cover_against_the_new_track_list(client):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    path = "/api/library/playlist-edits/Arma%20Reforger"
+    edit = {"expected_track_ids": ["tunnel"], "name": " Renamed ", "track_ids": ["emparedado"]}
+
+    rejected = client.patch(path, json={**edit, "cover_track_id": "tunnel"})
+    assert rejected.status_code == 400
+    assert rejected.get_json()["error"] == "Invalid cover_track_id (not in playlist)"
+    assert client.get("/api/library").get_json()["playlists"] == {"Arma Reforger": ["tunnel"]}
+
+    accepted = client.patch(path, json={**edit, "cover_track_id": " emparedado "})
+    assert accepted.status_code == 200
+    assert accepted.get_json()["playlists"] == {"Renamed": ["emparedado"]}
+    assert accepted.get_json()["settings"]["playlist_covers"] == {"Renamed": "emparedado"}
+
+    cleared = client.patch("/api/library/playlist-edits/Renamed", json={
+        "expected_track_ids": ["emparedado"], "cover_track_id": " ",
+    })
+    assert cleared.status_code == 200
+    assert not cleared.get_json()["settings"].get("playlist_covers")
+
+
 def test_new_edit_routes_require_preconditions_and_do_not_mutate_without_them(client):
     user_id = ensure_multiuser_layout()["user_id"]
     _seed_library(user_id)
