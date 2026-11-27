@@ -24,7 +24,7 @@ const [searchQuery, setSearchQuery] = createSignal('');
 const [searchSubmittedQuery, setSearchSubmittedQuery] = createSignal('');
 const [searchStatus, setSearchStatus] = createSignal<'idle' | 'loading' | 'ready' | 'error'>('idle');
 const [searchResults, setSearchResults] = createSignal<TvSearchResultSet>(emptySearchResults());
-const [libraryTab, setLibraryTab] = createSignal<TvLibraryTab>('playlists');
+const [libraryTab, setLibraryTab] = createSignal<TvLibraryTab>();
 const [queueOpen, setQueueOpen] = createSignal(false);
 const [dimActive, setDimActive] = createSignal(false);
 const [tvNotice, setTvNotice] = createSignal<string | null>(null);
@@ -60,7 +60,7 @@ export function resetTvState(): void {
   setSearchSubmittedQuery('');
   setSearchStatus('idle');
   setSearchResults(emptySearchResults());
-  setLibraryTab('playlists');
+  setLibraryTab(undefined);
   setQueueOpen(false);
   setDimActive(false);
   setTvNotice(null);

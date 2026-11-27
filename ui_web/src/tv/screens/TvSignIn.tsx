@@ -1,4 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { BrandIcon } from '../../components/BrandIcon';
 import { Control, InputControl } from '../../design/Control';
 import { api, ApiError, type TvAuthRequest } from '../../lib/api';
 import { apiOrigin } from '../../lib/config';
@@ -239,7 +240,7 @@ function TvSignInInner(props: TvSignInProps) {
         if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
           event.preventDefault();
           active.blur();
-          focus.reconcileFocus();
+          focus.focusById(`signin-tab-${mode()}`);
         }
       }
     };
@@ -256,9 +257,9 @@ function TvSignInInner(props: TvSignInProps) {
   return (
     <main class={styles.tvSignInPage} data-tv-scroll-y="main" aria-labelledby="tv-signin-heading">
       <header class={styles.tvHeaderBar}>
-        <div>
+        <div class={styles.tvSignInIdentity}>
+          <BrandIcon />
           <h1 id="tv-signin-heading" class={styles.tvPageTitle}>{t('tv.signIn.title')}</h1>
-          <p class={styles.tvSubtitle}>{t('tv.signIn.subtitle')}</p>
         </div>
         <div class={styles.tvAccountPill}>
           {t('tv.signIn.stationUrl')}: {apiOrigin()}
@@ -266,7 +267,7 @@ function TvSignInInner(props: TvSignInProps) {
       </header>
 
       <div
-        class={styles.tvRowGroup}
+        class={styles.tvTabs}
         data-tv-group-container="signin-tabs"
         data-tv-group-kind="row"
         data-tv-group-order="10"
@@ -322,46 +323,6 @@ function TvSignInInner(props: TvSignInProps) {
         >
           {t('tv.signIn.tabPassword')}
         </Control>
-      </div>
-
-      <div
-        class={styles.tvRowGroup}
-        data-tv-group-container="signin-room"
-        data-tv-group-kind="row"
-        data-tv-group-order="20"
-        data-tv-rail-edge="none"
-      >
-        <InputControl
-          aria-label={t('tv.signIn.roomLabel')}
-          data-tv-id="signin-room-input"
-          data-tv-group="signin-room"
-          data-tv-index="0"
-          data-tv-focused={focus.activeId() === 'signin-room-input' ? 'true' : undefined}
-          class={styles.tvInput}
-          classList={{ [styles.tvFocusTarget]: true }}
-          type="text"
-          value={roomName()}
-          onInput={(e) => {
-            setRoomSaved(false);
-            setRoomName(e.currentTarget.value);
-          }}
-        />
-        <Control
-          data-tv-id="signin-room-save"
-          data-tv-group="signin-room"
-          data-tv-index="1"
-          data-tv-focused={focus.activeId() === 'signin-room-save' ? 'true' : undefined}
-          class={styles.tvSecondaryBtn}
-          classList={{ [styles.tvFocusTarget]: true }}
-          onClick={saveRoomLabel}
-        >
-          {t('tv.signIn.roomSave')}
-        </Control>
-        <Show when={roomSaved()}>
-          <span class={styles.tvAccountPill}>
-            {t('tv.account.roomSaved', { name: roomName() })}
-          </span>
-        </Show>
       </div>
 
       <Show when={mode() === 'phone'}>
@@ -520,6 +481,48 @@ function TvSignInInner(props: TvSignInProps) {
           </Control>
         </form>
       </Show>
+
+      <div
+        class={styles.tvRoomName}
+        data-tv-group-container="signin-room"
+        data-tv-group-kind="row"
+        data-tv-group-order="40"
+        data-tv-rail-edge="none"
+      >
+        <label for="tv-room-name" class={styles.tvSubtitle}>{t('tv.signIn.roomLabel')}</label>
+        <InputControl
+          id="tv-room-name"
+          aria-label={t('tv.signIn.roomLabel')}
+          data-tv-id="signin-room-input"
+          data-tv-group="signin-room"
+          data-tv-index="0"
+          data-tv-focused={focus.activeId() === 'signin-room-input' ? 'true' : undefined}
+          class={styles.tvInput}
+          classList={{ [styles.tvFocusTarget]: true }}
+          type="text"
+          value={roomName()}
+          onInput={(e) => {
+            setRoomSaved(false);
+            setRoomName(e.currentTarget.value);
+          }}
+        />
+        <Control
+          data-tv-id="signin-room-save"
+          data-tv-group="signin-room"
+          data-tv-index="1"
+          data-tv-focused={focus.activeId() === 'signin-room-save' ? 'true' : undefined}
+          class={styles.tvSecondaryBtn}
+          classList={{ [styles.tvFocusTarget]: true }}
+          onClick={saveRoomLabel}
+        >
+          {t('tv.signIn.roomSave')}
+        </Control>
+        <Show when={roomSaved()}>
+          <span class={styles.tvAccountPill}>
+            {t('tv.account.roomSaved', { name: roomName() })}
+          </span>
+        </Show>
+      </div>
     </main>
   );
 }

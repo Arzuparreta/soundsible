@@ -149,38 +149,6 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
 
   return (
     <>
-      <div
-        class={styles.tvRowGroup}
-        data-tv-group-container="album-actions"
-        data-tv-group-kind="row"
-        data-tv-group-order="10"
-      >
-        <Control
-          data-tv-id="album-back-btn"
-          data-tv-group="album-actions"
-          data-tv-index="0"
-          data-tv-focused={focus.activeId() === 'album-back-btn' ? 'true' : undefined}
-          class={styles.tvSecondaryBtn}
-          classList={{ [styles.tvFocusTarget]: true }}
-          onClick={props.onBack}
-        >
-          <BackIcon /> {t('tv.back')}
-        </Control>
-        <Show when={rows().length > 0}>
-          <Control
-            data-tv-id="album-play-btn"
-            data-tv-group="album-actions"
-            data-tv-index="1"
-            data-tv-focused={focus.activeId() === 'album-play-btn' ? 'true' : undefined}
-            class={styles.tvPrimaryBtn}
-            classList={{ [styles.tvFocusTarget]: true }}
-            onClick={() => playAt(0)}
-          >
-            <PlayFilledIcon /> {t('tv.library.playAll')}
-          </Control>
-        </Show>
-      </div>
-
       <section class={styles.tvDetailHero}>
         <TvArtwork
           class={styles.tvDetailArt}
@@ -188,14 +156,48 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
           alt={displayTitle()}
           fallbackLabel={displayTitle()}
         />
-        <EntityIdentity
-          class={styles.tvDetailInfo}
-          headingClass={styles.tvHeroTitle}
-          title={displayTitle()}
-          metadata={<p class={styles.tvSubtitle}>
-            {displayArtist()} · {trackCount(rows().length)}
-          </p>}
-        />
+        <div class={styles.tvDetailInfo}>
+          <span class={styles.tvEyebrow}>{t('nowPlaying.contextKind.album')}</span>
+          <EntityIdentity
+            class={styles.tvIdentityText}
+            headingClass={styles.tvHeroTitle}
+            title={displayTitle()}
+            metadata={<p class={styles.tvSubtitle}>
+              {displayArtist()} · {trackCount(rows().length)}
+            </p>}
+          />
+          <div
+            class={styles.tvRowGroup}
+            data-tv-group-container="album-actions"
+            data-tv-group-kind="row"
+            data-tv-group-order="10"
+          >
+            <Show when={rows().length > 0}>
+              <Control
+                data-tv-id="album-play-btn"
+                data-tv-group="album-actions"
+                data-tv-index="0"
+                data-tv-focused={focus.activeId() === 'album-play-btn' ? 'true' : undefined}
+                class={styles.tvPrimaryBtn}
+                classList={{ [styles.tvFocusTarget]: true }}
+                onClick={() => playAt(0)}
+              >
+                <PlayFilledIcon /> {t('tv.library.playAll')}
+              </Control>
+            </Show>
+            <Control
+              data-tv-id="album-back-btn"
+              data-tv-group="album-actions"
+              data-tv-index="1"
+              data-tv-focused={focus.activeId() === 'album-back-btn' ? 'true' : undefined}
+              class={styles.tvSecondaryBtn}
+              classList={{ [styles.tvFocusTarget]: true }}
+              onClick={props.onBack}
+            >
+              <BackIcon /> {t('tv.back')}
+            </Control>
+          </div>
+        </div>
       </section>
 
       <Show when={loading()}>

@@ -35,14 +35,13 @@ export function TvQueueOverlay() {
 
   return (
     <Show when={queueOpen()}>
-      <div class={styles.tvModalBackdrop} role="presentation">
+      <div class={`${styles.tvModalBackdrop} ${styles.tvQueueBackdrop}`} role="presentation">
         <section
-          class={styles.tvModal}
+          class={`${styles.tvModal} ${styles.tvQueuePanel}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="tv-queue-heading"
           data-tv-modal="tv-queue"
-          data-tv-scroll-y="tv-queue"
         >
           <header
             class={styles.tvHeaderBar}
@@ -71,35 +70,36 @@ export function TvQueueOverlay() {
             when={state.playback.queue.length > 0}
             fallback={<p class={styles.tvSubtitle}>{t('tv.player.queueEmpty')}</p>}
           >
-            <TvVirtualList
-              items={state.playback.queue}
-              itemKey={entry => entry.queueId}
-              groupId="tv-queue-rows"
-              order={20}
-
-              initialIndex={Math.max(0, state.playback.index)}
-              insideModal
-              railEdge={false}
-              renderRow={(entry, index, tvId) => {
-                const isCurrent = () => index() === state.playback.index;
-                return (
-                  <TvTrackRow
-                    id={tvId()}
-                    group="tv-queue-rows"
-                    index={index()}
-                    title={entry().title}
-                    artist={entry().artist}
-                    artwork={trackCoverUrl(entry(), 'thumb')}
-                    duration={entry().duration}
-                    playing={isCurrent()}
-                    onActivate={() => {
-                      actions.playQueueEntry(entry().queueId);
-                      setQueueOpen(false);
-                    }}
-                  />
-                );
-              }}
-            />
+            <div class={styles.tvQueueScroll} data-tv-scroll-y="tv-queue">
+              <TvVirtualList
+                items={state.playback.queue}
+                itemKey={entry => entry.queueId}
+                groupId="tv-queue-rows"
+                order={20}
+                initialIndex={Math.max(0, state.playback.index)}
+                insideModal
+                railEdge={false}
+                renderRow={(entry, index, tvId) => {
+                  const isCurrent = () => index() === state.playback.index;
+                  return (
+                    <TvTrackRow
+                      id={tvId()}
+                      group="tv-queue-rows"
+                      index={index()}
+                      title={entry().title}
+                      artist={entry().artist}
+                      artwork={trackCoverUrl(entry(), 'thumb')}
+                      duration={entry().duration}
+                      playing={isCurrent()}
+                      onActivate={() => {
+                        actions.playQueueEntry(entry().queueId);
+                        setQueueOpen(false);
+                      }}
+                    />
+                  );
+                }}
+              />
+            </div>
           </Show>
         </section>
       </div>

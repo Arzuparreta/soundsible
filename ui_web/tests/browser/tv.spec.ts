@@ -304,8 +304,9 @@ test('Home focuses Resume without autoplay, D-pad rail restore, held OK single f
   });
 
   await page.goto('/tv/');
-  const resumeBtn = page.locator('[data-tv-id="home-resume-btn"]');
+  const resumeBtn = page.locator('[data-tv-id="home-feature-action"]');
   await expect(resumeBtn).toBeFocused();
+  await expect(resumeBtn).not.toHaveCSS('box-shadow', 'none');
 
   // Never autoplays on open or moving focus.
   let audioPlayed = await page.evaluate(() =>
@@ -332,6 +333,16 @@ test('Home focuses Resume without autoplay, D-pad rail restore, held OK single f
   expect(await icon.boundingBox()).toEqual(iconBefore);
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('[data-tv-id="home-recent-0"]')).toBeFocused();
+
+  // Returning from a recent album restores its card before the catalog can reload.
+  await page.keyboard.press('ArrowRight');
+  const secondAlbum = page.locator('[data-tv-id="home-recent-1"]');
+  await expect(secondAlbum).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-tv-id="album-play-btn"]')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(secondAlbum).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
 
   // Return Up to Resume, press OK once to start local playback; held OK (repeat: true) does not toggle twice.
   await page.keyboard.press('ArrowUp');
@@ -426,6 +437,7 @@ test('long virtualized playlist stays bounded, Back restores focus & Search quer
 
   // Open Now Playing from Rail while music keeps playing.
   await page.locator('[data-tv-id="rail-now-playing"]').click();
+  await expect(page.locator('[data-tv-id="np-toggle"]')).toBeFocused();
   await expect(page.getByRole('slider', { name: 'Seek position' })).toBeVisible();
   const slider = page.locator('[data-tv-id="np-seek"]');
   await slider.focus();
@@ -516,4 +528,28 @@ test('TV Library Albums paginates beyond the first page cleanly via Load more al
   await expect(page.locator('[data-tv-id="lib-album-129"]')).toBeVisible();
   await expect(page.locator('[data-tv-id="lib-album-120"]')).toBeFocused();
   await expect(loadMore).toHaveCount(0);
+});
+
+test('a track without album metadata is playable from Home and reachable in Library', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes('mobile'), 'Smart TV runs on living-room viewports');
+  await setupTvSession(page, {
+    viewport: { width: 1280, height: 720 },
+    tracks: [{ id: 'solo', title: 'Night train', artist: 'Station sessions', duration: 205 }],
+    playlists: {},
+  });
+  await page.route((url) => url.pathname === '/api/library/albums', route => route.fulfill({ json: { albums: [] } }));
+  await page.goto('/tv/');
+  const feature = page.getByRole('button', { name: 'Play', exact: true });
+  await expect(feature).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-tv-id="tv-mini-open"]')).toContainText('Night train');
+  await page.locator('[data-tv-id="rail-library"]').click();
+  await expect(page.getByRole('tab', { name: 'Songs' })).toBeFocused();
+  await expect(page.getByRole('tab', { name: 'Songs' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('[data-tv-id="lib-songs-item-0"]')).toContainText('Night train');
+
+  await page.locator('[data-tv-id="rail-search"]').click();
+  await expect(page.getByRole('searchbox')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-tv-id="rail-search"]')).toBeFocused();
 });

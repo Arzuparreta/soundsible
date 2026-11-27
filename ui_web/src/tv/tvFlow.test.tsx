@@ -162,7 +162,7 @@ describe('Smart TV screen journeys', () => {
 
     const { getByText } = render(() => (
       <TvFocusProvider>
-        <TvHome onNavigate={onNavigate} onRequestSignOut={vi.fn()} />
+        <TvHome recentAlbums={[]} newestAlbums={[]} onNavigate={onNavigate} />
       </TvFocusProvider>
     ));
 
@@ -170,7 +170,7 @@ describe('Smart TV screen journeys', () => {
     expect(mockActions.resumeHere).not.toHaveBeenCalled();
     expect(mockActions.resumePlayback).not.toHaveBeenCalled();
 
-    await fireEvent.click(getByText('Midnight City'));
+    await fireEvent.click(getByText('Resume'));
     expect(mockActions.resumeHere).toHaveBeenCalledTimes(1);
   });
 

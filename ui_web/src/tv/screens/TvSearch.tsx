@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
+import { NavigationSearchIcon } from '../../components/icons';
 import { Control, InputControl } from '../../design/Control';
 import { api } from '../../lib/api';
 import { playCatalogItem } from '../../lib/catalogItem';
@@ -154,7 +155,7 @@ export function TvSearch(props: TvSearchProps) {
       </header>
 
       <form
-        class={styles.tvRowGroup}
+        class={styles.tvSearchForm}
         data-tv-group-container="search-controls"
         data-tv-group-kind="row"
         data-tv-group-order="10"
@@ -163,19 +164,22 @@ export function TvSearch(props: TvSearchProps) {
           void runSearch();
         }}
       >
-        <InputControl
-          aria-label={t('tv.search.placeholder')}
-          data-tv-id="search-input"
-          data-tv-group="search-controls"
-          data-tv-index="0"
-          data-tv-focused={focus.activeId() === 'search-input' ? 'true' : undefined}
-          class={styles.tvInput}
-          classList={{ [styles.tvFocusTarget]: true }}
-          type="search"
-          placeholder={t('tv.search.placeholder')}
-          value={searchQuery()}
-          onInput={(e) => setSearchQuery(e.currentTarget.value)}
-        />
+        <div class={styles.tvSearchField}>
+          <NavigationSearchIcon />
+          <InputControl
+            aria-label={t('tv.search.placeholder')}
+            data-tv-id="search-input"
+            data-tv-group="search-controls"
+            data-tv-index="0"
+            data-tv-focused={focus.activeId() === 'search-input' ? 'true' : undefined}
+            class={styles.tvInput}
+            classList={{ [styles.tvFocusTarget]: true }}
+            type="search"
+            placeholder={t('tv.search.placeholder')}
+            value={searchQuery()}
+            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+          />
+        </div>
         <Control
           type="submit"
           data-tv-id="search-submit"

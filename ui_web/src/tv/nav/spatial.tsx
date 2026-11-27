@@ -193,7 +193,7 @@ export function TvFocusProvider(props: ParentProps) {
       root.querySelectorAll<HTMLElement>('[data-tv-group-container]'),
     ).filter((group) => {
       if (!includeRail && group.dataset.tvGroupKind === 'rail') return false;
-      return queryFocusable(group).length > 0;
+      return Array.from(group.querySelectorAll<HTMLElement>('[data-tv-id]')).some(isElementVisible);
     });
     return groups.sort((a, b) => {
       const ao = Number(a.dataset.tvGroupOrder ?? '100');
@@ -267,7 +267,10 @@ export function TvFocusProvider(props: ParentProps) {
     const groups = queryContentGroups(false);
     for (const group of groups) {
       const items = queryFocusable(group);
-      if (items.length > 0) return focusElement(items[0]);
+      if (items.length > 0) {
+        const selectedTab = items.find(item => item.getAttribute('aria-selected') === 'true');
+        return focusElement(selectedTab ?? items[0]);
+      }
     }
     const any = queryFocusable(scopeRoot());
     return any.length > 0 ? focusElement(any[0]) : false;

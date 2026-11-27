@@ -14,6 +14,7 @@ interface TvAccountProps {
 
 export function TvAccount(props: TvAccountProps) {
   const focus = useTvFocus();
+  const [showDiagnostics, setShowDiagnostics] = createSignal(false);
   const [roomInput, setRoomInput] = createSignal(state.device.device_name);
 
   function saveRoomName(e: Event): void {
@@ -104,22 +105,35 @@ export function TvAccount(props: TvAccountProps) {
         </div>
       </form>
 
-      <section class={styles.tvFormCard}>
-        <h2 class={styles.tvSectionTitle}>{t('tv.account.diagnostics')}</h2>
-        <p class={styles.tvSubtitle}>
-          {t('tv.account.formFactor', { value: state.device.form_factor })}
-        </p>
-        <p class={styles.tvSubtitle}>
-          {t('tv.account.commandsCount', { count: state.device.commands.length })}
-        </p>
-        <p class={styles.tvSubtitle}>
-          {t('tv.account.connectionState', {
-            state: state.online ? t('tv.account.connected') : t('tv.account.offline'),
-          })}
-        </p>
-        <p class={styles.tvSubtitle}>
-          {t('tv.account.viewport', { width: viewportWidth(), height: viewportHeight() })}
-        </p>
+      <section class={styles.tvDiagnostics} data-tv-group-container="account-diagnostics" data-tv-group-kind="row" data-tv-group-order="30">
+        <Control
+          class={styles.tvSecondaryBtn}
+          classList={{ [styles.tvFocusTarget]: true }}
+          aria-expanded={showDiagnostics()}
+          data-tv-id="account-diagnostics-toggle"
+          data-tv-group="account-diagnostics"
+          data-tv-index="0"
+          data-tv-focused={focus.activeId() === 'account-diagnostics-toggle' ? 'true' : undefined}
+          onClick={() => setShowDiagnostics(value => !value)}
+        >
+          {t('tv.account.diagnostics')}
+        </Control>
+        <Show when={showDiagnostics()}>
+          <p class={styles.tvSubtitle}>
+            {t('tv.account.formFactor', { value: state.device.form_factor })}
+          </p>
+          <p class={styles.tvSubtitle}>
+            {t('tv.account.commandsCount', { count: state.device.commands.length })}
+          </p>
+          <p class={styles.tvSubtitle}>
+            {t('tv.account.connectionState', {
+              state: state.online ? t('tv.account.connected') : t('tv.account.offline'),
+            })}
+          </p>
+          <p class={styles.tvSubtitle}>
+            {t('tv.account.viewport', { width: viewportWidth(), height: viewportHeight() })}
+          </p>
+        </Show>
       </section>
     </>
   );

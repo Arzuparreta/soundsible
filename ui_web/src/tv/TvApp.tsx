@@ -1,5 +1,6 @@
-import { createEffect, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { Control } from '../design/Control';
+import { api } from '../lib/api';
 import { TV_REMOTE_COMMANDS } from '../lib/deviceIdentity';
 import { t } from '../lib/i18n';
 import { logout, user } from '../lib/session';
@@ -112,6 +113,22 @@ function TvShellInner(props: TvAppProps) {
     };
   }
 
+  // Keep album data available across routes so Back can immediately restore
+  // the selected card and the shelf's horizontal offset.
+  const homeRevision = createMemo<number | undefined>(previous =>
+    router.route().name === 'home' ? state.catalog.revision : previous,
+  );
+  const [recentAlbums, { refetch: refreshRecent }] = createResource(homeRevision,
+    () => api.getLibraryAlbums({ sort: 'recent', limit: 12 }).catch(() => []));
+  const [newestAlbums, { refetch: refreshNewest }] = createResource(homeRevision,
+    () => api.getLibraryAlbums({ sort: 'newest', limit: 16 }).catch(() => []));
+
+  function focusRouteEntry(): void {
+    if (router.route().name === 'now-playing' &&
+        (focus.focusById('np-gesture-btn') || focus.focusById('np-toggle'))) return;
+    focus.focusFirstInContent();
+  }
+
   function pushWithSnapshot(hash: string): void {
     const snap = focus.snapshotScrollState();
     router.push(hash, {
@@ -122,7 +139,7 @@ function TvShellInner(props: TvAppProps) {
     queueMicrotask(() => {
       const scroller = document.querySelector<HTMLElement>('[data-tv-scroll-y="main"]');
       if (scroller) scroller.scrollTop = 0;
-      focus.focusFirstInContent();
+      focusRouteEntry();
     });
   }
 
@@ -143,11 +160,15 @@ function TvShellInner(props: TvAppProps) {
       focus.exitRail();
       return;
     }
+    if (hash === '#/home' && homeRevision() === state.catalog.revision) {
+      void refreshRecent();
+      void refreshNewest();
+    }
     router.replaceRoot(hash);
     queueMicrotask(() => {
       const scroller = document.querySelector<HTMLElement>('[data-tv-scroll-y="main"]');
       if (scroller) scroller.scrollTop = 0;
-      focus.focusFirstInContent();
+      focusRouteEntry();
     });
   }
 
@@ -158,9 +179,12 @@ function TvShellInner(props: TvAppProps) {
       remoteCommands: TV_REMOTE_COMMANDS,
     });
     props.onReady?.();
+    if (router.route().name !== 'home') queueMicrotask(focusRouteEntry);
 
     const onHashChange = () => {
+      if (window.location.hash === router.route().hash) return;
       router.syncFromLocation(window.location.hash);
+      queueMicrotask(focusRouteEntry);
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -229,7 +253,7 @@ function TvShellInner(props: TvAppProps) {
         if (isTextInputElement(active)) {
           event.preventDefault();
           active?.blur();
-          focus.reconcileFocus();
+          focus.focusRail();
           return;
         }
         if (focus.handleBackAction()) {
@@ -289,8 +313,9 @@ function TvShellInner(props: TvAppProps) {
             <Switch>
               <Match when={activeRoute().name === 'home'}>
                 <TvHome
+                  recentAlbums={recentAlbums() ?? []}
+                  newestAlbums={newestAlbums() ?? []}
                   onNavigate={pushWithSnapshot}
-                  onRequestSignOut={() => setSignOutOpen(true)}
                 />
               </Match>
               <Match when={activeRoute().name === 'search'}>

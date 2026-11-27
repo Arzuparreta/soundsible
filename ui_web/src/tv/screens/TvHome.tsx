@@ -1,15 +1,15 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createMemo, For, Show } from 'solid-js';
+import { ArtistIcon, PlayFilledIcon, QueueListIcon } from '../../components/icons';
 import { Control } from '../../design/Control';
-import { api } from '../../lib/api';
 import { trackCount } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { trackCoverUrl } from '../../lib/media';
 import { playlistNames } from '../../lib/playlistOrder';
-import { requiresLogin, user } from '../../lib/session';
+import { user } from '../../lib/session';
 import { actions, musicLibrary, resumeState, state } from '../../stores';
 import type { CatalogAlbum } from '../../types/music';
 import { TvCard } from '../components/TvCard';
-import { TvArtwork } from '../components/TvArtwork';
+import { TvArtwork, TvArtworkBackdrop } from '../components/TvArtwork';
 import { useTvFocus } from '../nav/spatial';
 import { albumTvHash, playlistTvHash } from '../nav/router';
 import {
@@ -21,26 +21,30 @@ import {
 import styles from '../styles/tv.module.css';
 
 interface TvHomeProps {
+  recentAlbums: CatalogAlbum[];
+  newestAlbums: CatalogAlbum[];
   onNavigate: (hash: string) => void;
-  onRequestSignOut: () => void;
 }
 
 export function TvHome(props: TvHomeProps) {
   const focus = useTvFocus();
-  const [recentAlbums, setRecentAlbums] = createSignal<CatalogAlbum[]>([]);
-  const [newestAlbums, setNewestAlbums] = createSignal<CatalogAlbum[]>([]);
-
   const trackIndex = createMemo(() => buildTrackIndex(musicLibrary(), state.library));
   const fallbackAlbums = createMemo(() => deriveAlbumsFromTracks(musicLibrary()));
 
   const shownLibraryAlbums = createMemo(() =>
-    newestAlbums().length > 0 ? newestAlbums() : fallbackAlbums().slice(0, 16),
+    props.newestAlbums.length > 0 ? props.newestAlbums : fallbackAlbums().slice(0, 16),
   );
   const savedPlaylistNames = createMemo(() =>
     playlistNames(state.playlists, state.librarySettings.playlist_order),
   );
 
   const resumableTrack = () => state.playback.currentTrack ?? resumeState()?.track ?? null;
+  const firstTrack = createMemo(() => {
+    const recentCover = props.recentAlbums[0]?.cover_track_id;
+    return (recentCover && trackIndex().get(recentCover)) || musicLibrary()[0];
+  });
+  const featuredTrack = () => resumableTrack() || firstTrack();
+  const playingHere = () => Boolean(state.playback.currentTrack && state.playback.isPlaying);
   const accountLabel = () => user()?.display_name || user()?.username || '';
 
   const isEmptyLibrary = () =>
@@ -48,92 +52,21 @@ export function TvHome(props: TvHomeProps) {
     !resumableTrack() &&
     musicLibrary().length === 0 &&
     savedPlaylistNames().length === 0 &&
-    recentAlbums().length === 0 &&
+    props.recentAlbums.length === 0 &&
     shownLibraryAlbums().length === 0;
 
-  let initialFocusApplied = false;
-  let resumeFocusApplied = false;
-  let initialFallbackId: string | null = null;
-  let userMovedFocus = false;
-
-  function maybeApplyInitialFocus(): void {
-    const active = focus.activeId();
-    const bodyFocused = typeof document === 'undefined' || document.activeElement === document.body;
-
-    // If playback resume state arrives shortly after initial library load,
-    // promote initial focus to the top Resume card unless the user already navigated away.
-    if (
-      resumableTrack() &&
-      !resumeFocusApplied &&
-      !userMovedFocus &&
-      (!active || bodyFocused || active === initialFallbackId)
-    ) {
-      if (focus.focusById('home-resume-btn')) {
-        resumeFocusApplied = true;
-        initialFocusApplied = true;
-        initialFallbackId = null;
-        return;
-      }
-    }
-
-    if (initialFocusApplied) return;
-    if (active && !bodyFocused) {
-      initialFocusApplied = true;
-      return;
-    }
-    const candidates = [
-      recentAlbums().length > 0 ? 'home-recent-0' : null,
-      savedPlaylistNames().length > 0 ? 'home-playlist-0' : null,
-      shownLibraryAlbums().length > 0 ? 'home-album-0' : null,
-      isEmptyLibrary() ? 'home-empty-search' : null,
-    ].filter((id): id is string => Boolean(id));
-
-    for (const candidate of candidates) {
-      initialFallbackId = candidate;
-      if (focus.focusById(candidate)) {
-        initialFocusApplied = true;
-        return;
-      }
-      initialFallbackId = null;
-    }
-  }
-
-  onMount(() => {
-    const markInteracted = () => {
-      userMovedFocus = true;
-    };
-    window.addEventListener('keydown', markInteracted, { capture: true, once: true });
-    window.addEventListener('pointerdown', markInteracted, { capture: true, once: true });
-
-    void api.getLibraryAlbums({ sort: 'recent', limit: 12 })
-      .then((albums) => setRecentAlbums(albums))
-      .catch(() => {});
-    void api.getLibraryAlbums({ sort: 'newest', limit: 16 })
-      .then((albums) => setNewestAlbums(albums))
-      .catch(() => {});
-    queueMicrotask(maybeApplyInitialFocus);
-
-    onCleanup(() => {
-      window.removeEventListener('keydown', markInteracted, true);
-      window.removeEventListener('pointerdown', markInteracted, true);
+  createEffect(() => {
+    const candidate = featuredTrack() ? 'home-feature-action'
+      : props.recentAlbums.length ? 'home-recent-0'
+      : savedPlaylistNames().length ? 'home-playlist-0'
+      : shownLibraryAlbums().length ? 'home-album-0'
+      : isEmptyLibrary() ? 'home-empty-search' : null;
+    if (candidate) queueMicrotask(() => {
+      if (document.activeElement === document.body) focus.focusById(candidate);
     });
   });
 
-  createEffect(() => {
-    const active = focus.activeId();
-    if (active && active !== initialFallbackId && active !== 'home-resume-btn') {
-      userMovedFocus = true;
-    }
-  });
-
-  createEffect(() => {
-    void state.libraryReady;
-    void state.catalog.revision;
-    void resumableTrack();
-    queueMicrotask(maybeApplyInitialFocus);
-  });
-
-  function handleResume(): void {
+  function playFeatured(): void {
     if (state.playback.currentTrack) {
       if (state.playback.isPlaying) {
         props.onNavigate('#/now-playing');
@@ -143,78 +76,53 @@ export function TvHome(props: TvHomeProps) {
       return;
     }
     if (resumeState()) {
-      const hadFocus = focus.activeId() === 'home-resume-btn';
       actions.resumeHere();
-      if (hadFocus && !focus.focusById('home-resume-btn')) {
-        queueMicrotask(() => {
-          focus.focusById('home-resume-btn');
-        });
-      }
+    } else {
+      const track = firstTrack();
+      if (track) actions.playTrack(track);
     }
   }
 
   return (
     <>
-      <header
-        class={styles.tvHeaderBar}
-        data-tv-group-container="home-header"
-        data-tv-group-kind="row"
-        data-tv-group-order="5"
-      >
+      <header class={styles.tvHeaderBar}>
         <h1 class={styles.tvPageTitle}>{t('tv.nav.home')}</h1>
-        <div class={styles.tvAccountStrip}>
-          <Show when={accountLabel()}>
-            <span class={styles.tvAccountPill}>
-              {t('tv.home.signedInBadge', { name: accountLabel() })}
-            </span>
-          </Show>
-          <Show when={requiresLogin()}>
-            <Control
-              data-tv-id="home-signout-btn"
-              data-tv-group="home-header"
-              data-tv-index="0"
-              data-tv-focused={focus.activeId() === 'home-signout-btn' ? 'true' : undefined}
-              class={styles.tvSecondaryBtn}
-              classList={{ [styles.tvFocusTarget]: true }}
-              onClick={props.onRequestSignOut}
-            >
-              {t('tv.signOut')}
-            </Control>
-          </Show>
-        </div>
+        <Show when={accountLabel()}>
+          <span class={styles.tvAccountStrip} aria-label={t('tv.home.signedInBadge', { name: accountLabel() })}>
+            <ArtistIcon /> {accountLabel()}
+          </span>
+        </Show>
       </header>
 
-      <Show when={resumableTrack()}>
+      <Show when={featuredTrack()}>
         {(track) => (
-          <div
-            data-tv-group-container="home-resume"
-            data-tv-group-kind="row"
-            data-tv-group-order="10"
-          >
-            <Control
-              data-tv-id="home-resume-btn"
-              data-tv-group="home-resume"
-              data-tv-index="0"
-              data-tv-focused={focus.activeId() === 'home-resume-btn' ? 'true' : undefined}
-              class={styles.tvResumeCard}
-              classList={{ [styles.tvFocusTarget]: true }}
-              onClick={handleResume}
-            >
-              <TvArtwork
-                class={styles.tvResumeArt}
-                src={trackCoverUrl(track(), 'thumb')}
-                alt={track().title}
-                fallbackLabel={track().title}
-              />
-              <div class={styles.tvResumeBody}>
-                <span class={styles.tvEyebrow}>{t('tv.home.resumeTitle')}</span>
-                <strong class={styles.tvPageTitle}>{track().title}</strong>
-                <span class={styles.tvSubtitle}>
-                  {track().artist} · {state.playback.isPlaying ? t('tv.player.playingNow') : t('tv.home.resumeOk')}
-                </span>
+          <section class={styles.tvFeature} data-stage-surface>
+            <TvArtworkBackdrop src={trackCoverUrl(track(), 'thumb')} />
+            <div class={styles.tvResumeBody}>
+              <span class={styles.tvEyebrow}>
+                {playingHere() ? t('tv.player.playingNow') : resumableTrack() ? t('tv.home.resumeTitle') : t('tv.nav.library')}
+              </span>
+              <h2 class={styles.tvHeroTitle}>{track().title}</h2>
+              <p class={styles.tvSubtitle}>{[track().artist, track().album].filter(Boolean).join(' · ')}</p>
+              <div data-tv-group-container="home-feature" data-tv-group-kind="row" data-tv-group-order="10">
+                <Control
+                  data-tv-id="home-feature-action"
+                  data-tv-group="home-feature"
+                  data-tv-index="0"
+                  data-tv-focused={focus.activeId() === 'home-feature-action' ? 'true' : undefined}
+                  class={styles.tvPrimaryBtn}
+                  classList={{ [styles.tvFocusTarget]: true }}
+                  onClick={playFeatured}
+                >
+                  {playingHere() ? <QueueListIcon /> : <PlayFilledIcon />}
+                  {playingHere() ? t('tv.nav.nowPlaying') : resumableTrack() ? t('tv.resume') : t('tv.play')}
+                </Control>
               </div>
-            </Control>
-          </div>
+            </div>
+            <div class={styles.tvSleeve} aria-hidden="true">
+              <TvArtwork class={styles.tvResumeArt} src={trackCoverUrl(track())} alt="" fallbackLabel={track().title} />
+            </div>
+          </section>
         )}
       </Show>
 
@@ -241,7 +149,7 @@ export function TvHome(props: TvHomeProps) {
         </section>
       </Show>
 
-      <Show when={recentAlbums().length > 0}>
+      <Show when={props.recentAlbums.length > 0}>
         <section class={styles.tvShelfSection} aria-labelledby="home-recent-title">
           <h2 id="home-recent-title" class={styles.tvSectionTitle}>{t('tv.home.recent')}</h2>
           <div
@@ -251,7 +159,7 @@ export function TvHome(props: TvHomeProps) {
             data-tv-group-kind="shelf"
             data-tv-group-order="20"
           >
-            <For each={recentAlbums()}>
+            <For each={props.recentAlbums}>
               {(album, idx) => {
                 const tvId = () => `home-recent-${idx()}`;
                 return (

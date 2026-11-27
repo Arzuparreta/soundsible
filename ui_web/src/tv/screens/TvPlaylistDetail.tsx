@@ -40,38 +40,6 @@ export function TvPlaylistDetail(props: TvPlaylistDetailProps) {
 
   return (
     <>
-      <div
-        class={styles.tvRowGroup}
-        data-tv-group-container="playlist-actions"
-        data-tv-group-kind="row"
-        data-tv-group-order="10"
-      >
-        <Control
-          data-tv-id="playlist-back-btn"
-          data-tv-group="playlist-actions"
-          data-tv-index="0"
-          data-tv-focused={focus.activeId() === 'playlist-back-btn' ? 'true' : undefined}
-          class={styles.tvSecondaryBtn}
-          classList={{ [styles.tvFocusTarget]: true }}
-          onClick={props.onBack}
-        >
-          <BackIcon /> {t('tv.back')}
-        </Control>
-        <Show when={tracks().length > 0}>
-          <Control
-            data-tv-id="playlist-play-btn"
-            data-tv-group="playlist-actions"
-            data-tv-index="1"
-            data-tv-focused={focus.activeId() === 'playlist-play-btn' ? 'true' : undefined}
-            class={styles.tvPrimaryBtn}
-            classList={{ [styles.tvFocusTarget]: true }}
-            onClick={() => playAt(0)}
-          >
-            <PlayFilledIcon /> {t('tv.library.playAll')}
-          </Control>
-        </Show>
-      </div>
-
       <section class={styles.tvDetailHero}>
         <TvArtwork
           class={styles.tvDetailArt}
@@ -79,12 +47,46 @@ export function TvPlaylistDetail(props: TvPlaylistDetailProps) {
           alt={props.playlistName}
           fallbackLabel={props.playlistName}
         />
-        <EntityIdentity
-          class={styles.tvDetailInfo}
-          headingClass={styles.tvHeroTitle}
-          title={props.playlistName}
-          metadata={<p class={styles.tvSubtitle}>{trackCount(tracks().length)}</p>}
-        />
+        <div class={styles.tvDetailInfo}>
+          <span class={styles.tvEyebrow}>{t('nowPlaying.contextKind.playlist')}</span>
+          <EntityIdentity
+            class={styles.tvIdentityText}
+            headingClass={styles.tvHeroTitle}
+            title={props.playlistName}
+            metadata={<p class={styles.tvSubtitle}>{trackCount(tracks().length)}</p>}
+          />
+          <div
+            class={styles.tvRowGroup}
+            data-tv-group-container="playlist-actions"
+            data-tv-group-kind="row"
+            data-tv-group-order="10"
+          >
+            <Show when={tracks().length > 0}>
+              <Control
+                data-tv-id="playlist-play-btn"
+                data-tv-group="playlist-actions"
+                data-tv-index="0"
+                data-tv-focused={focus.activeId() === 'playlist-play-btn' ? 'true' : undefined}
+                class={styles.tvPrimaryBtn}
+                classList={{ [styles.tvFocusTarget]: true }}
+                onClick={() => playAt(0)}
+              >
+                <PlayFilledIcon /> {t('tv.library.playAll')}
+              </Control>
+            </Show>
+            <Control
+              data-tv-id="playlist-back-btn"
+              data-tv-group="playlist-actions"
+              data-tv-index="1"
+              data-tv-focused={focus.activeId() === 'playlist-back-btn' ? 'true' : undefined}
+              class={styles.tvSecondaryBtn}
+              classList={{ [styles.tvFocusTarget]: true }}
+              onClick={props.onBack}
+            >
+              <BackIcon /> {t('tv.back')}
+            </Control>
+          </div>
+        </div>
       </section>
 
       <Show

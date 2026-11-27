@@ -44,6 +44,9 @@ export function TvLibrary(props: TvLibraryProps) {
   );
   const songs = createMemo(() => musicLibrary());
 
+  const activeTab = () => libraryTab() ?? (shownAlbums().length ? 'albums'
+    : savedPlaylists().length ? 'playlists' : songs().length ? 'songs' : 'albums');
+
   let disposed = false;
 
   async function loadAlbumsPage(offset: number, focusFirstAppended = false): Promise<void> {
@@ -105,13 +108,13 @@ export function TvLibrary(props: TvLibraryProps) {
       </header>
 
       <div
-        class={styles.tvRowGroup}
+        class={styles.tvTabs}
         data-tv-group-container="lib-tabs"
         data-tv-group-kind="row"
         data-tv-group-order="10"
         role="tablist"
       >
-        <For each={['playlists', 'albums', 'songs'] as const}>
+        <For each={['albums', 'playlists', 'songs'] as const}>
           {(tab, idx) => {
             const tvId = () => `lib-tab-${tab}`;
             const label = () =>
@@ -123,7 +126,7 @@ export function TvLibrary(props: TvLibraryProps) {
             return (
               <Control
                 role="tab"
-                aria-selected={libraryTab() === tab}
+                aria-selected={activeTab() === tab}
                 data-tv-id={tvId()}
                 data-tv-group="lib-tabs"
                 data-tv-index={String(idx())}
@@ -131,7 +134,7 @@ export function TvLibrary(props: TvLibraryProps) {
                 class={styles.tvSecondaryBtn}
                 classList={{
                   [styles.tvFocusTarget]: true,
-                  [styles.tvSelectedBtn]: libraryTab() === tab,
+                  [styles.tvSelectedBtn]: activeTab() === tab,
                 }}
                 onClick={() => selectTab(tab)}
               >
@@ -142,7 +145,7 @@ export function TvLibrary(props: TvLibraryProps) {
         </For>
       </div>
 
-      <Show when={libraryTab() === 'playlists'}>
+      <Show when={activeTab() === 'playlists'}>
         <Show
           when={savedPlaylists().length > 0}
           fallback={<p class={styles.tvSubtitle}>{t('tv.library.emptyPlaylists')}</p>}
@@ -174,7 +177,7 @@ export function TvLibrary(props: TvLibraryProps) {
         </Show>
       </Show>
 
-      <Show when={libraryTab() === 'albums'}>
+      <Show when={activeTab() === 'albums'}>
         <Show
           when={shownAlbums().length > 0}
           fallback={<p class={styles.tvSubtitle}>{t('tv.library.emptyAlbums')}</p>}
@@ -230,7 +233,7 @@ export function TvLibrary(props: TvLibraryProps) {
         </Show>
       </Show>
 
-      <Show when={libraryTab() === 'songs'}>
+      <Show when={activeTab() === 'songs'}>
         <Show
           when={songs().length > 0}
           fallback={<p class={styles.tvSubtitle}>{t('tv.library.emptySongs')}</p>}

@@ -16,6 +16,11 @@ export function TvMiniBar(props: TvMiniBarProps) {
   const focus = useTvFocus();
   const track = () => state.playback.currentTrack;
 
+  const progress = () => {
+    const duration = state.playback.duration || track()?.duration || 0;
+    return duration > 0 ? Math.max(0, Math.min(1, state.playback.currentTime / duration)) : 0;
+  };
+
   return (
     <Show when={track()}>
       {(current) => (
@@ -25,23 +30,26 @@ export function TvMiniBar(props: TvMiniBarProps) {
           data-tv-group-kind="row"
           data-tv-group-order="900"
         >
+          <span aria-hidden="true" class={styles.tvMiniProgress} style={{ transform: `scaleX(${progress()})` }} />
           <Control
+            aria-label={`${t('tv.nav.nowPlaying')} · ${current().title} · ${current().artist}`}
             data-tv-id="tv-mini-open"
             data-tv-group="tv-mini-bar"
             data-tv-index="0"
             data-tv-focused={focus.activeId() === 'tv-mini-open' ? 'true' : undefined}
-            class={styles.tvSecondaryBtn}
+            class={styles.tvMiniIdentity}
             classList={{ [styles.tvFocusTarget]: true }}
             onClick={props.onOpenNowPlaying}
           >
             <TvArtwork
               class={styles.tvTrackArt}
               src={trackCoverUrl(current(), 'thumb')}
-              alt={current().title}
+              alt=""
               fallbackLabel={current().title}
             />
-            <span>
-              {current().title} — {current().artist}
+            <span class={styles.tvTrackMain}>
+              <strong class={styles.tvTrackTitle}>{current().title}</strong>
+              <span class={styles.tvTrackSub}>{current().artist}</span>
             </span>
           </Control>
           <Show

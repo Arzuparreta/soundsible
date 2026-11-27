@@ -5,7 +5,7 @@ import { clockTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { trackCoverUrl } from '../../lib/media';
 import { actions, state } from '../../stores';
-import { TvArtwork } from '../components/TvArtwork';
+import { TvArtwork, TvArtworkBackdrop } from '../components/TvArtwork';
 import type { TvAction } from '../nav/input';
 import { useTvFocus } from '../nav/spatial';
 import { setDimActive, setQueueOpen } from '../state';
@@ -115,7 +115,8 @@ export function TvNowPlaying(props: TvNowPlayingProps) {
       }
     >
       {(current) => (
-        <div class={styles.tvNowPlaying}>
+        <div class={styles.tvNowPlaying} data-stage-surface>
+          <TvArtworkBackdrop src={trackCoverUrl(current(), 'thumb')} />
           <Show when={state.playback.needsGesture}>
             <div
               class={styles.tvGestureBanner}
@@ -149,118 +150,129 @@ export function TvNowPlaying(props: TvNowPlayingProps) {
             <div class={styles.tvNowMeta}>
               <span class={styles.tvEyebrow}>{t('tv.nav.nowPlaying')}</span>
               <h1 class={styles.tvHeroTitle}>{current().title}</h1>
-              <p class={styles.tvPageTitle}>{current().artist}</p>
+              <p class={styles.tvNowArtist}>{current().artist}</p>
               <Show when={current().album}>
                 <p class={styles.tvSubtitle}>{current().album}</p>
               </Show>
+
+              <div
+                class={styles.tvSeekBox}
+                data-tv-group-container="np-seek-group"
+                data-tv-group-kind="row"
+                data-tv-group-order="15"
+                data-tv-rail-edge="none"
+              >
+                <Control
+                  role="slider"
+                  aria-label={t('tv.player.seekLabel')}
+                  aria-valuetext={clockTime(displayedPositionSec())}
+                  aria-valuemin={0}
+                  aria-valuemax={Math.round(durationSec())}
+                  aria-valuenow={Math.round(displayedPositionSec())}
+                  data-tv-id="np-seek"
+                  data-tv-group="np-seek-group"
+                  data-tv-index="0"
+                  data-tv-focused={focus.activeId() === 'np-seek' ? 'true' : undefined}
+                  class={styles.tvSeekControl}
+                  classList={{ [styles.tvFocusTarget]: true }}
+                  onClick={() => {
+                    if (seekPreviewSec() !== null) {
+                      commitPreview();
+                    } else {
+                      setSeekPreviewSec(Math.round(state.playback.currentTime));
+                    }
+                  }}
+                >
+                  <div class={styles.tvSeekTrack}>
+                    <div class={styles.tvSeekFill} style={{ width: progressPct() }} />
+                  </div>
+                  <div class={styles.tvSeekTimes}>
+                    <span>
+                      {seekPreviewSec() !== null
+                        ? t('tv.player.seekPreview', { time: clockTime(seekPreviewSec()!) })
+                        : clockTime(state.playback.currentTime)}
+                    </span>
+                    <span class={styles.tvSeekHint}>{t('tv.player.seekHint')}</span>
+                    <span>{clockTime(durationSec())}</span>
+                  </div>
+                </Control>
+              </div>
+
+              <div
+                class={styles.tvTransport}
+                data-tv-group-container="np-transport"
+                data-tv-group-kind="row"
+                data-tv-group-order="25"
+              >
+                <Control
+                  aria-label={t('tv.previous')}
+                  data-tv-id="np-prev"
+                  data-tv-group="np-transport"
+                  data-tv-index="0"
+                  data-tv-focused={focus.activeId() === 'np-prev' ? 'true' : undefined}
+                  class={styles.tvSecondaryBtn}
+                  classList={{ [styles.tvFocusTarget]: true }}
+                  onClick={() => actions.prev()}
+                >
+                  <PrevFilledIcon />
+                </Control>
+                <Control
+                  aria-label={state.playback.isPlaying ? t('tv.pause') : t('tv.play')}
+                  data-tv-id="np-toggle"
+                  data-tv-group="np-transport"
+                  data-tv-index="1"
+                  data-tv-focused={focus.activeId() === 'np-toggle' ? 'true' : undefined}
+                  class={styles.tvPrimaryBtn}
+                  classList={{ [styles.tvFocusTarget]: true }}
+                  onClick={() => actions.togglePlay()}
+                >
+                  {state.playback.isPlaying ? <PauseFilledIcon /> : <PlayFilledIcon />}
+                </Control>
+                <Control
+                  aria-label={t('tv.next')}
+                  data-tv-id="np-next"
+                  data-tv-group="np-transport"
+                  data-tv-index="2"
+                  data-tv-focused={focus.activeId() === 'np-next' ? 'true' : undefined}
+                  class={styles.tvSecondaryBtn}
+                  classList={{ [styles.tvFocusTarget]: true }}
+                  onClick={() => actions.next()}
+                >
+                  <NextFilledIcon />
+                </Control>
+              </div>
+
+              <div
+                class={styles.tvRowGroup}
+                data-tv-group-container="np-options"
+                data-tv-group-kind="row"
+                data-tv-group-order="35"
+              >
+                <Control
+                  data-tv-id="np-queue"
+                  data-tv-group="np-options"
+                  data-tv-index="0"
+                  data-tv-focused={focus.activeId() === 'np-queue' ? 'true' : undefined}
+                  class={styles.tvSecondaryBtn}
+                  classList={{ [styles.tvFocusTarget]: true }}
+                  onClick={() => setQueueOpen(true)}
+                >
+                  <QueueListIcon /> {t('tv.queue')} ({state.playback.queue.length})
+                </Control>
+                <Control
+                  data-tv-id="np-dim"
+                  data-tv-group="np-options"
+                  data-tv-index="1"
+                  data-tv-focused={focus.activeId() === 'np-dim' ? 'true' : undefined}
+                  class={styles.tvSecondaryBtn}
+                  classList={{ [styles.tvFocusTarget]: true }}
+                  onClick={() => setDimActive(true)}
+                >
+                  ☾ {t('tv.dim')}
+                </Control>
+              </div>
             </div>
           </section>
-
-          <div
-            class={styles.tvSeekBox}
-            data-tv-group-container="np-seek-group"
-            data-tv-group-kind="row"
-            data-tv-group-order="15"
-            data-tv-rail-edge="none"
-          >
-            <Control
-              role="slider"
-              aria-label={t('tv.player.seekLabel')}
-              aria-valuemin={0}
-              aria-valuemax={Math.round(durationSec())}
-              aria-valuenow={Math.round(displayedPositionSec())}
-              data-tv-id="np-seek"
-              data-tv-group="np-seek-group"
-              data-tv-index="0"
-              data-tv-focused={focus.activeId() === 'np-seek' ? 'true' : undefined}
-              class={styles.tvSeekControl}
-              classList={{ [styles.tvFocusTarget]: true }}
-              onClick={() => {
-                if (seekPreviewSec() !== null) {
-                  commitPreview();
-                } else {
-                  setSeekPreviewSec(Math.round(state.playback.currentTime));
-                }
-              }}
-            >
-              <div class={styles.tvSeekTrack}>
-                <div class={styles.tvSeekFill} style={{ width: progressPct() }} />
-              </div>
-              <div class={styles.tvSeekTimes}>
-                <span>
-                  {seekPreviewSec() !== null
-                    ? t('tv.player.seekPreview', { time: clockTime(seekPreviewSec()!) })
-                    : clockTime(state.playback.currentTime)}
-                </span>
-                <span>{t('tv.player.seekHint')}</span>
-                <span>{clockTime(durationSec())}</span>
-              </div>
-            </Control>
-          </div>
-
-          <div
-            class={styles.tvRowGroup}
-            data-tv-group-container="np-transport"
-            data-tv-group-kind="row"
-            data-tv-group-order="25"
-          >
-            <Control
-              data-tv-id="np-prev"
-              data-tv-group="np-transport"
-              data-tv-index="0"
-              data-tv-focused={focus.activeId() === 'np-prev' ? 'true' : undefined}
-              class={styles.tvSecondaryBtn}
-              classList={{ [styles.tvFocusTarget]: true }}
-              onClick={() => actions.prev()}
-            >
-              <PrevFilledIcon /> {t('tv.previous')}
-            </Control>
-            <Control
-              data-tv-id="np-toggle"
-              data-tv-group="np-transport"
-              data-tv-index="1"
-              data-tv-focused={focus.activeId() === 'np-toggle' ? 'true' : undefined}
-              class={styles.tvPrimaryBtn}
-              classList={{ [styles.tvFocusTarget]: true }}
-              onClick={() => actions.togglePlay()}
-            >
-              {state.playback.isPlaying ? <PauseFilledIcon /> : <PlayFilledIcon />}
-              {state.playback.isPlaying ? t('tv.pause') : t('tv.play')}
-            </Control>
-            <Control
-              data-tv-id="np-next"
-              data-tv-group="np-transport"
-              data-tv-index="2"
-              data-tv-focused={focus.activeId() === 'np-next' ? 'true' : undefined}
-              class={styles.tvSecondaryBtn}
-              classList={{ [styles.tvFocusTarget]: true }}
-              onClick={() => actions.next()}
-            >
-              <NextFilledIcon /> {t('tv.next')}
-            </Control>
-            <Control
-              data-tv-id="np-queue"
-              data-tv-group="np-transport"
-              data-tv-index="3"
-              data-tv-focused={focus.activeId() === 'np-queue' ? 'true' : undefined}
-              class={styles.tvSecondaryBtn}
-              classList={{ [styles.tvFocusTarget]: true }}
-              onClick={() => setQueueOpen(true)}
-            >
-              <QueueListIcon /> {t('tv.queue')} ({state.playback.queue.length})
-            </Control>
-            <Control
-              data-tv-id="np-dim"
-              data-tv-group="np-transport"
-              data-tv-index="4"
-              data-tv-focused={focus.activeId() === 'np-dim' ? 'true' : undefined}
-              class={styles.tvSecondaryBtn}
-              classList={{ [styles.tvFocusTarget]: true }}
-              onClick={() => setDimActive(true)}
-            >
-              ☾ {t('tv.dim')}
-            </Control>
-          </div>
         </div>
       )}
     </Show>

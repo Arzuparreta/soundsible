@@ -47,6 +47,15 @@ and local search reuse the web implementations. TV list navigation adapts
 `CollectionRows` by pinning a requested row until it mounts, then moving DOM
 focus. The queue identifies each row by its playback occurrence.
 
+Home offers one playable track even when it has no album metadata. The main
+action resumes a session, opens local playback in progress, or plays a library
+track. Library remembers an explicit tab choice and otherwise opens a populated
+collection. Back leaves a search field for the rail. Collection details put Play
+and Back next to the title. Now Playing opens on the transport, with seek above
+and the queue and dim controls below. The queue drawer scrolls its tracks
+independently of its heading. Home and Now Playing reuse the web player's
+cached artwork backdrop. The physical TV qualification gate below is still open.
+
 ## Sign-in and account boundaries
 
 The current signed-in display creates a code and the **claiming device** gets the session cookie in `shared/api/routes/pairing.py`. Reuse that today by letting the user display a code on an authorized device and enter it on the TV with the pairing sheet open. Preserve existing station login and trusted-network rules. Acknowledge expiry, allow retry, and retain the selected station. Confirm the existing route's account and permission requirements on a non-admin account before enabling this option.
