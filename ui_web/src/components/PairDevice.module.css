@@ -54,8 +54,8 @@
   width: 240px;
   height: 240px;
   border-radius: var(--radius-sm);
-  background: var(--bg-raised);
-  animation: pulse 1.4s ease-in-out infinite;
+  background: var(--skeleton-base);
+  animation: pulse 1.65s var(--ease-in-out) infinite;
   animation-play-state: var(--decorative-animation-state, running);
 }
 
@@ -65,7 +65,13 @@
     opacity: 1;
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.62;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qrSkeleton {
+    animation: none;
   }
 }
 

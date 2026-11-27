@@ -280,5 +280,6 @@ main:has(> [data-page-indicator]) [data-primary-scroll]::after {
   opacity: 1;
 }
 
-/* Route modules and initial data share a bounded, scrollable loading surface. */
-.page-loading { min-height: 0; overflow: auto; padding: var(--space-md) var(--gutter); }
+/* Route modules and initial data share a bounded, scrollable loading surface.
+   Skeleton templates supply their own container padding to match loaded content. */
+.page-loading { flex: 1; min-height: 0; overflow-y: auto; }

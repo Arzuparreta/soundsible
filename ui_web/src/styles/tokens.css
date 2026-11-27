@@ -142,6 +142,7 @@
   --ambient-highlight: rgba(255, 255, 255, 0.025);
   --skeleton-base: #17171b;
   --skeleton-highlight: #24242a;
+  --skeleton-on-raised: var(--skeleton-highlight);
 
   /* ── Glass (outside the player stage) ──
      The stage has its own material palette, but it lives under
@@ -340,6 +341,7 @@
   --ambient-highlight: rgba(255, 255, 255, 0.6);
   --skeleton-base: #e8e8eb;
   --skeleton-highlight: #f6f6f7;
+  --skeleton-on-raised: #e2e2e7;
 
   /* Same inversion the light stage makes with --stage-material: a high-alpha
      white, so dark ink stays readable over whatever scrolls past, and a dark
@@ -363,6 +365,8 @@
   --ink-primary: #ffffff;
   --ink-secondary: #d2d2da;
   --ink-tertiary: #b2b2bd;
+  --skeleton-base: #26262d;
+  --skeleton-on-raised: #34343c;
   --hairline: #5b5b66;
   --hairline-strong: #858590;
   --hairline-soft: rgba(255, 255, 255, 0.22);
@@ -387,6 +391,8 @@
   --ink-primary: #050507;
   --ink-secondary: #303038;
   --ink-tertiary: #4b4b55;
+  --skeleton-base: #d8d8df;
+  --skeleton-on-raised: #cacad4;
   --hairline: #9696a1;
   --hairline-strong: #656570;
   --hairline-soft: rgba(0, 0, 0, 0.2);
@@ -626,6 +632,7 @@
     --download-ink: var(--success);
     --skeleton-base: var(--bg-raised);
     --skeleton-highlight: var(--bg-active);
+    --skeleton-on-raised: var(--bg-active);
     --glass-fill: color-mix(in srgb, var(--bg-base) 91%, transparent);
     --glass-gloss: var(--ambient-highlight);
     --glass-line: var(--hairline);

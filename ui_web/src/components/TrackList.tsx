@@ -62,12 +62,13 @@ export default function TrackList(props: {
         registerPrimaryScroll(element, () => !props.loading || props.tracks.length > 0);
       }}
       class={styles.scroll}
+      tabIndex={props.loading && props.tracks.length === 0 ? 0 : undefined}
       data-library-scroll
       data-primary-scroll
     >
       <Show
         when={!(props.loading && props.tracks.length === 0)}
-        fallback={<SkeletonRows count={10} />}
+        fallback={<SkeletonRows count={12} />}
       >
         <Show
           when={props.tracks.length > 0}

@@ -7,7 +7,7 @@ import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './DeviceSheet.module.css';
 import { EmptyState } from './EmptyState';
-import { SkeletonRows } from './Skeleton';
+import { SkeletonSurfaceRows } from '../design/SkeletonSurfaceRows';
 import Button from './Button';
 import { deviceIcon } from './deviceIcon';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -43,7 +43,7 @@ function createDeviceList(select: (devices: Device[]) => Device[]) {
 
 function DeviceListState(props: { list: ReturnType<typeof createDeviceList>; empty: string; children: JSX.Element }) {
   return (
-    <Show when={!props.list.loading()} fallback={<SkeletonRows count={3} compact />}>
+    <Show when={!props.list.loading()} fallback={<SkeletonSurfaceRows count={3} variant="device" />}>
       <Show
         when={!props.list.failed()}
         fallback={

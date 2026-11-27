@@ -254,9 +254,6 @@
   "src/components/Sidebar.module.css": {
     "styles": 3
   },
-  "src/components/Skeleton.module.css": {
-    "styles": 17
-  },
   "src/components/SongRow.module.css": {
     "styles": 21
   },

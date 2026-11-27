@@ -1,14 +1,14 @@
 import { createEffect, onMount, onCleanup } from 'solid-js';
 import { HashRouter, Route, useNavigate, useSearchParams } from '@solidjs/router';
 import Shell from './app';
-import { asyncPage } from './components/AsyncPage';
+import { asyncPage, type AsyncPageShape } from './components/AsyncPage';
 
-const Home = asyncPage(() => import('./routes/Home'), () => t('nav.home'), 'cards');
+const Home = asyncPage(() => import('./routes/Home'), () => t('nav.home'), 'home');
 
 const collectionPage = (
   view: 'songs' | 'albums' | 'artists',
   titleKey: 'library.songs' | 'library.albums' | 'library.artists',
-  shape: 'rows' | 'cards' = 'cards',
+  shape: AsyncPageShape = view,
 ) => asyncPage(
   () => import('./routes/Library').then((m) => ({ default: () => <m.default view={view} /> })),
   () => t(titleKey),
@@ -18,27 +18,27 @@ const collectionPage = (
 const bookmarkPage = (kind?: 'album' | 'artist') => asyncPage(
   () => import('./routes/Bookmarks').then((m) => ({ default: () => <m.default kind={kind} /> })),
   () => t(kind === 'album' ? 'savedEntities.albums' : kind === 'artist' ? 'savedEntities.artists' : 'savedEntities.title'),
-  'cards',
+  kind === 'album' ? 'bookmarks-albums' : kind === 'artist' ? 'bookmarks-artists' : 'bookmarks',
 );
 
-const Songs = collectionPage('songs', 'library.songs', 'rows');
-const Albums = collectionPage('albums', 'library.albums');
-const Artists = collectionPage('artists', 'library.artists');
+const Songs = collectionPage('songs', 'library.songs', 'songs');
+const Albums = collectionPage('albums', 'library.albums', 'albums');
+const Artists = collectionPage('artists', 'library.artists', 'artists');
 const Bookmarks = bookmarkPage();
 const BookmarksAlbums = bookmarkPage('album');
 const BookmarksArtists = bookmarkPage('artist');
 
-const Favourites = asyncPage(() => import('./routes/Favourites'), () => t('favourites.title'));
-const Settings = asyncPage(() => import('./routes/Settings'), () => t('settings.title'));
-const Search = asyncPage(() => import('./routes/Search'), () => t('nav.search'));
-const Playlists = asyncPage(() => import('./routes/Playlists'), () => t('playlists.title'), 'cards');
-const PlaylistDetail = asyncPage(() => import('./routes/PlaylistDetail'), () => t('playlists.title'));
-const Podcasts = asyncPage(() => import('./routes/Podcasts'), () => t('nav.podcasts'), 'cards');
-const PodcastShow = asyncPage(() => import('./routes/PodcastShow'), () => t('nav.podcasts'));
-const Downloads = asyncPage(() => import('./routes/Downloads'), () => t('downloads.title'));
+const Favourites = asyncPage(() => import('./routes/Favourites'), () => t('favourites.title'), 'favourites');
+const Settings = asyncPage(() => import('./routes/Settings'), () => t('settings.title'), 'settings');
+const Search = asyncPage(() => import('./routes/Search'), () => t('nav.search'), 'search');
+const Playlists = asyncPage(() => import('./routes/Playlists'), () => t('playlists.title'), 'playlists');
+const PlaylistDetail = asyncPage(() => import('./routes/PlaylistDetail'), () => t('playlists.title'), 'playlist-detail');
+const Podcasts = asyncPage(() => import('./routes/Podcasts'), () => t('nav.podcasts'), 'podcasts');
+const PodcastShow = asyncPage(() => import('./routes/PodcastShow'), () => t('nav.podcasts'), 'podcast-show');
+const Downloads = asyncPage(() => import('./routes/Downloads'), () => t('downloads.title'), 'downloads');
 const Migrate = asyncPage(() => import('./routes/Migrate'), () => t('migrate.title'));
-const Artist = asyncPage(() => import('./routes/Artist'), () => t('library.artists'));
-const Album = asyncPage(() => import('./routes/Album'), () => t('library.albums'));
+const Artist = asyncPage(() => import('./routes/Artist'), () => t('library.artists'), 'artist');
+const Album = asyncPage(() => import('./routes/Album'), () => t('library.albums'), 'album');
 const Live = asyncPage(() => import('./routes/Live'), () => t('live.title'));
 const DesignPreview = asyncPage(() => import('./pages/DesignPreview'), () => t('common.loading'));
 const Placeholder = asyncPage(() =>

@@ -25,6 +25,7 @@ import { RefreshIcon } from '../components/icons';
 import { SearchField } from '../components/SearchField';
 import { PageToolbar } from '../components/PageToolbar';
 import { MusicListRowView } from '../components/MusicListRowView';
+import { SkeletonRows } from '../design/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import type { MenuAction } from '../components/ActionMenu';
 import type { CatalogItem, SavedEntry, Track } from '../types/music';
@@ -327,7 +328,7 @@ export default function CatalogSearch(props: {
     </Show>
     <Show when={props.disconnected}><p role="status">{t('library.unreachable')}</p></Show>
     <Show when={error() || catalog.error()}><p role="alert">{error() || catalog.error()} <button onClick={() => setRetry(value => value + 1)}>{t('common.retry')}</button></p></Show>
-    <Show when={loading()}><p role="status">{t('common.loading')}</p></Show>
+    <Show when={loading()}><SkeletonRows count={6} variant="media" /></Show>
     <Show when={partial() || catalog.partial()}><p role="status">{t('musicExplorer.partial')}</p></Show>
     <Show when={!loading() && query().trim() && !props.disconnected}>
       <For each={rows()} fallback={<EmptyState>{t('search.catalogNoResults')}</EmptyState>}>{item => item.type === 'artist' || item.type === 'album'

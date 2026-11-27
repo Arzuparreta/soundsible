@@ -12,7 +12,7 @@ import styles from './ConnectSheet.module.css';
 import { deviceIcon } from './deviceIcon';
 import { EmptyState } from './EmptyState';
 import { CheckIcon } from './icons';
-import { SkeletonRows } from './Skeleton';
+import { SkeletonSurfaceRows } from '../design/SkeletonSurfaceRows';
 
 /** This device as the sheet shows it. */
 export interface ConnectSelf {
@@ -163,7 +163,7 @@ export function openConnectSheet(control: RemoteControl, self: ConnectSelf): voi
               onSelect={() => control(null)}
             />
             <Show when={remoteDevices()} fallback={
-              <Show when={remoteDevicesFailed()} fallback={<SkeletonRows count={2} compact />}>
+              <Show when={remoteDevicesFailed()} fallback={<SkeletonSurfaceRows count={2} variant="device" />}>
                 <EmptyState compact tone="danger">
                   {t('common.loadFailed')} <Button variant="secondary" onClick={() => void refreshDevices()}>{t('common.retry')}</Button>
                 </EmptyState>

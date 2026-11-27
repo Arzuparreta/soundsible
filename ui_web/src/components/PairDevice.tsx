@@ -9,7 +9,7 @@ import { t } from '../lib/i18n';
 import { browserPairingOrigin, pairingQrText } from '../lib/pairingQr';
 import styles from './PairDevice.module.css';
 import { EmptyState } from './EmptyState';
-import { SkeletonRows } from './Skeleton';
+import { SkeletonSurfaceRows } from '../design/SkeletonSurfaceRows';
 
 const POLL_MS = 2000;
 const ACTIVE = new Set(['pending', 'claimed']);
@@ -224,7 +224,7 @@ export function PairedDevicesPanel(props: { origin?: () => string | null } = {})
 
   return (
     <>
-      <Show when={!loading()} fallback={<SkeletonRows count={2} compact />}>
+      <Show when={!loading()} fallback={<SkeletonSurfaceRows count={2} variant="setting" />}>
         <Show when={devices().length > 0} fallback={<EmptyState compact>{t('pairDevice.empty')}</EmptyState>}>
           <For each={devices()}>
             {(d) => (

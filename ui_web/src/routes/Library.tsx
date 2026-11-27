@@ -235,7 +235,7 @@ export default function Library(props: { view: LibraryCollectionView }) {
       <Show when={searching()} fallback={
         <Switch>
           <Match when={view() === 'albums'}>
-            <Show when={gridReady() && (!albums.loading || albumRows().length > 0)} fallback={<div class="page-loading"><SkeletonCards /></div>}>
+            <Show when={gridReady() && (!albums.loading || albumRows().length > 0)} fallback={<div class="page-loading" tabIndex={0}><SkeletonCards count={12} lines={3} padded /></div>}>
             <Show when={!albumError()} fallback={<EmptyState tone="danger">{t('common.loadFailed')} <Button variant="secondary" onClick={() => void retryAlbums()}>{t('common.retry')}</Button></EmptyState>}>
             <Show
               when={albumRows().length > 0}
@@ -256,7 +256,7 @@ export default function Library(props: { view: LibraryCollectionView }) {
             </Show></Show>
           </Match>
           <Match when={view() === 'artists'}>
-            <Show when={gridReady() && !((state.loading || state.catalog.loading) && artists().length === 0)} fallback={<div class="page-loading"><SkeletonCards shape="round" /></div>}>
+            <Show when={gridReady() && !((state.loading || state.catalog.loading) && artists().length === 0)} fallback={<div class="page-loading" tabIndex={0}><SkeletonCards count={12} shape="round" lines={2} padded /></div>}>
             <Show when={artists().length > 0} fallback={emptyState(t('library.emptyArtists'))}>
               <div
                 ref={(element) => registerPrimaryScroll(element)}
@@ -280,7 +280,7 @@ export default function Library(props: { view: LibraryCollectionView }) {
         </Switch>
       }>
         <Show when={!unreachable()} fallback={emptyState(t('library.emptyLibrary'))}>
-          <Show when={!state.loading || songs().length > 0} fallback={<div class="page-loading"><SkeletonRows /></div>}>
+          <Show when={!state.loading || songs().length > 0} fallback={<div class={styles.searchLoading}><SkeletonRows count={10} /></div>}>
             <LibrarySearchResults results={searchResults()} query={query()} />
           </Show>
         </Show>

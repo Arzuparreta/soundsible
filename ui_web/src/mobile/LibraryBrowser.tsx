@@ -8,6 +8,7 @@ import { request } from '../lib/http';
 import { coverUrl, registerArtworkMetadata } from '../lib/media';
 import { VirtualBrowseRows } from '../components/VirtualBrowseRows';
 import { MusicListRowView } from '../components/MusicListRowView';
+import { SkeletonRows } from '../design/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { t } from '../lib/i18n';
 import { playlistNames } from '../lib/playlistOrder';
@@ -152,7 +153,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
         <><Show when={tab() === 'albums'}><div class={styles.libraryTools}><button class={styles.menuTrigger} data-album-menu aria-label={t('library.albumSortTitle')} onClick={event => void albumMenu(event)}>⋯</button></div></Show>
         <Show when={tab() === 'albums' ? albumRows().length : artistRows().length}><NativeSearchToolbar search={search.reveal} /></Show>
         <Show when={!albums.error && !artists.error} fallback={<p role="alert">{t('common.loadFailed')} <button onClick={() => { void retryAlbums(); void retryArtists(); }}>{t('common.retry')}</button></p>}>
-          <Show when={!albums.loading && !artists.loading} fallback={<p role="status">{t('common.loading')}</p>}>
+          <Show when={!albums.loading && !artists.loading} fallback={<SkeletonRows count={8} variant="media" round={tab() === 'artists'} />}>
             <Show when={tab() === 'albums'} fallback={<For each={visibleArtists()} fallback={empty(artistRows(), t('library.emptyArtists'))}>{artist =>
               <MusicListRowView title={artist.name} subtitle={trackCount(artist.track_count)} seed={artist.id}
                 round cover={artist.cover_track_id ? coverUrl(artist.cover_track_id, 'thumb') : undefined}

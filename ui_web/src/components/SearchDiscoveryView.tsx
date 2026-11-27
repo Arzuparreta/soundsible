@@ -12,7 +12,7 @@ import {
   type DiscoveryTrackShelf,
 } from '../lib/searchDiscovery';
 import { CoverImage } from './CoverImage';
-import { SkeletonCards, SkeletonRows } from './Skeleton';
+import { SkeletonCards, SkeletonHeading, SkeletonRegion, SkeletonRows } from '../design/Skeleton';
 import styles from './SearchDiscovery.module.css';
 
 export interface DiscoveryLink {
@@ -60,9 +60,33 @@ export function SearchDiscoveryView(props: {
       <ChevronIcon direction="left" />{t('searchHome.back')}
     </button></Show>
     <Show when={props.loading && !hasVisible()}>
-      <Show when={props.expanded} fallback={<><SkeletonCards count={3} shape="round" /><SkeletonCards count={3} /><SkeletonRows count={5} compact /></>}>
-        <Show when={!isEntityExpanded()} fallback={<SkeletonCards count={8} shape={props.expanded === 'artists' ? 'round' : 'square'} />}><SkeletonRows count={8} compact /></Show>
-      </Show>
+      <SkeletonRegion class={styles.loadingStack}>
+        <Show when={props.expanded} fallback={<>
+          <div class={styles.section}>
+            <SkeletonHeading action />
+            <SkeletonCards layout="rail" shape="round" lines={2} bleedOnTouch decorative />
+          </div>
+          <div class={styles.section}>
+            <SkeletonHeading action />
+            <SkeletonCards layout="rail" shape="square" lines={3} bleedOnTouch decorative />
+          </div>
+          <div class={styles.section}>
+            <SkeletonHeading subtitle action />
+            <div class={styles.songs}>
+              <SkeletonRows count={5} decorative />
+            </div>
+          </div>
+        </>}>
+          <div class={styles.section}>
+            <SkeletonHeading />
+            <Show when={!isEntityExpanded()} fallback={<SkeletonCards layout="grid" count={12} shape={props.expanded === 'artists' ? 'round' : 'square'} lines={props.expanded === 'artists' ? 2 : 3} decorative />}>
+              <div class={styles.songs}>
+                <SkeletonRows count={10} decorative />
+              </div>
+            </Show>
+          </div>
+        </Show>
+      </SkeletonRegion>
     </Show>
     <Show when={props.cold && !props.expanded && !props.loading && !props.error && !props.preparing && hasVisible()}>
       <p class={styles.coldHint} role="note">{t('searchHome.coldHint')}</p>

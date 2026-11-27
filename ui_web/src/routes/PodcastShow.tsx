@@ -19,7 +19,8 @@ import type { PodcastEpisode, PodcastShowInfo, PodcastSubscription } from '../ty
 import styles from './PodcastShow.module.css';
 import hero from '../components/EntityHero.module.css';
 import { neutralCoverStyle } from '../lib/cover';
-import { SkeletonRows } from '../components/Skeleton';
+import { SkeletonRegion, SkeletonToolbar } from '../design/Skeleton';
+import { SkeletonSurfaceRows } from '../design/SkeletonSurfaceRows';
 import { EmptyState } from '../components/EmptyState';
 import { CollectionRows } from '../components/CollectionView';
 import type { MenuEvent } from '../lib/menuEvent';
@@ -339,7 +340,12 @@ export default function PodcastShow() {
         </div>
         <Show
           when={!data.loading}
-          fallback={<SkeletonRows count={8} compact />}
+          fallback={
+            <SkeletonRegion>
+              <SkeletonToolbar />
+              <SkeletonSurfaceRows count={8} variant="episode" decorative />
+            </SkeletonRegion>
+          }
         >
           <Show when={episodes().length} fallback={
             <Show when={!failed() && onlyDownloaded()} fallback={

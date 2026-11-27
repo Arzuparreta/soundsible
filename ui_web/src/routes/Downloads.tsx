@@ -11,7 +11,7 @@ import { state, actions, downloadCounts } from '../stores';
 import { t } from '../lib/i18n';
 import type { DownloadQueueItem } from '../types/download';
 import styles from './Downloads.module.css';
-import { SkeletonRows } from '../components/Skeleton';
+import { SkeletonSurfaceRows } from '../design/SkeletonSurfaceRows';
 import { downloadSearchFields, DownloadRowView } from '../components/DownloadRowView';
 
 const RANK: Record<string, number> = {
@@ -74,7 +74,7 @@ export default function Downloads() {
           when={hasDownloads()}
           fallback={
             <Show when={!failed()}>
-              <Show when={!loading()} fallback={<SkeletonRows />}>
+              <Show when={!loading()} fallback={<div class={styles.column}><SkeletonSurfaceRows count={4} variant="download" /></div>}>
                 <EmptyState>
                   <strong class={styles.emptyTitle}>{t('downloads.emptyTitle')}</strong>
                   <p>{t('downloads.emptyBody')}</p>

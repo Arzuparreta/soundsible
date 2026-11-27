@@ -43,6 +43,7 @@
   grid-template-columns: var(--browse-grid-columns);
   gap: var(--space-xl) var(--browse-card-gap, var(--space-lg));
 }
+.loadingGrid { padding-top: var(--space-sm); }
 .card { position: relative; flex: 0 0 var(--browse-card-width, 156px); min-width: 0; }
 /* A link shrinks to its name by default, and the cover's 100% with it: every
  * card would size to its title. */

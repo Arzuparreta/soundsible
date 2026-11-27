@@ -46,7 +46,8 @@ import SearchResultRow from '../components/SearchResultRow';
 import type { CatalogItem, CatalogSection, SearchResult } from '../types/music';
 import styles from './Search.module.css';
 import { coverStyle } from '../lib/cover';
-import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
+import { SkeletonCards, SkeletonHeading, SkeletonRegion, SkeletonRows, skeletonPageStyles } from '../design/Skeleton';
+import { SkeletonTopBlock } from '../design/SkeletonTopBlock';
 import { EmptyState } from '../components/EmptyState';
 import { sharedCapsuleFromHash, type TrackShareCapsuleV1 } from '../lib/trackShare';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -859,7 +860,12 @@ export default function Search() {
           <Match when={sharedCapsule()}>
             <div class={styles.results}>
               <Show when={sharedLoading()}>
-                <SkeletonRows count={1} compact />
+                <SkeletonRegion>
+                  <div class={`${styles.section} ${skeletonPageStyles.stackGapMd}`}>
+                    <SkeletonHeading />
+                    <SkeletonRows count={1} decorative />
+                  </div>
+                </SkeletonRegion>
               </Show>
               <Show when={!sharedLoading() && sharedError()}>
                 <EmptyState compact tone="danger">
@@ -903,7 +909,12 @@ export default function Search() {
           <Match when={domain() === 'youtube'}>
             <div class={styles.results}>
               <Show when={youtubeLoading() && youtubeResults().length === 0 && !youtubeDirect()}>
-                <SkeletonRows count={8} compact />
+                <SkeletonRegion>
+                  <div class={`${styles.section} ${skeletonPageStyles.stackGapMd}`}>
+                    <SkeletonHeading />
+                    <SkeletonRows count={8} decorative />
+                  </div>
+                </SkeletonRegion>
               </Show>
 
               <Show when={ytPending() && !youtubeLoading() && !youtubeDirect() && youtubeResults().length === 0 && q().trim().length >= 2}>
@@ -1087,24 +1098,39 @@ export default function Search() {
 
 function SearchLoading(props: { tab: SearchTab }) {
   return (
-    <Switch>
-      <Match when={props.tab === 'artist'}>
-        <SkeletonCards count={8} shape="round" />
-      </Match>
-      <Match when={props.tab === 'album'}>
-        <SkeletonCards count={8} />
-      </Match>
-      <Match when={props.tab === 'track,library_track'}>
-        <SkeletonRows count={8} compact />
-      </Match>
-      <Match when={true}>
-        <div class={styles.mixedSkeleton}>
-          <SkeletonRows count={4} compact />
-          <SkeletonCards count={4} shape="round" />
-          <SkeletonCards count={4} />
-        </div>
-      </Match>
-    </Switch>
+    <SkeletonRegion class={styles.results}>
+      <Switch>
+        <Match when={props.tab === 'artist'}>
+          <div class={`${styles.section} ${skeletonPageStyles.stackGapMd}`}>
+            <SkeletonHeading />
+            <SkeletonCards count={12} shape="round" lines={2} decorative />
+          </div>
+        </Match>
+        <Match when={props.tab === 'album'}>
+          <div class={`${styles.section} ${skeletonPageStyles.stackGapMd}`}>
+            <SkeletonHeading />
+            <SkeletonCards count={12} lines={3} decorative />
+          </div>
+        </Match>
+        <Match when={props.tab === 'track,library_track'}>
+          <div class={`${styles.section} ${skeletonPageStyles.stackGapMd}`}>
+            <SkeletonHeading />
+            <SkeletonRows count={10} decorative />
+          </div>
+        </Match>
+        <Match when={true}>
+          <SkeletonTopBlock />
+          <div class={`${styles.section} ${skeletonPageStyles.stackGapMd}`}>
+            <SkeletonHeading />
+            <SkeletonCards count={6} shape="round" lines={2} decorative />
+          </div>
+          <div class={`${styles.section} ${skeletonPageStyles.stackGapMd}`}>
+            <SkeletonHeading />
+            <SkeletonCards count={6} lines={3} decorative />
+          </div>
+        </Match>
+      </Switch>
+    </SkeletonRegion>
   );
 }
 

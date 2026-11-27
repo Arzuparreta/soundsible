@@ -10,12 +10,17 @@ vi.mock('@solidjs/router', () => ({ A: () => null }));
 vi.mock('../lib/shellLayout', () => ({ desktopShell: () => true }));
 vi.mock('../lib/api', () => ({ api: { resolveCatalogItem: mocks.resolve } }));
 vi.mock('../stores/player', () => ({ player: () => ({ autoMode: { active: false }, actions: { playFrom: mocks.play } }) }));
-vi.mock('../stores', () => ({
-  state: { loading: false },
-  favouriteRows: () => [
+const storeState = vi.hoisted(() => ({
+  loading: false,
+  rows: [
     { track: { id: 'already-owned', title: 'First track', artist: 'Another artist' }, entry: { id: 'already-owned' } },
     { track: { id: 'deezer:1', title: 'Café', artist: 'Artist', source: 'preview' }, entry: { keys: ['deezer:1'], title: 'Café', artist: 'Artist' } },
   ],
+}));
+
+vi.mock('../stores', () => ({
+  get state() { return { loading: storeState.loading }; },
+  favouriteRows: () => storeState.rows,
 }));
 vi.mock('../components/CollectionActions', () => ({ CollectionActions: () => null }));
 vi.mock('../components/TrackList', () => ({
@@ -37,4 +42,21 @@ it('resolves the selected favourite by the filtered row and preserves its playba
     [expect.objectContaining({ id: 'resolved-video', title: 'Café' })], 0,
     { context: expect.objectContaining({ kind: 'favourites', destination: '/favourites' }) },
   ));
+});
+
+it('reserves the desktop toolbar skeleton without a live searchbox while favourites are loading', () => {
+  const savedRows = storeState.rows;
+  storeState.loading = true;
+  storeState.rows = [];
+  let unmount: (() => void) | undefined;
+  try {
+    const rendered = render(() => <Favourites />);
+    unmount = rendered.unmount;
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(rendered.container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
+  } finally {
+    unmount?.();
+    storeState.loading = false;
+    storeState.rows = savedRows;
+  }
 });

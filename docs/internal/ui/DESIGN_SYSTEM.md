@@ -16,6 +16,17 @@ Existing imports from `components/Button`, `components/CoverImage` and
 - Row height, artwork and controls follow `--row-h`, `--cover-sm` and
   `--control-h`. Panel fields follow the same density recipe. Loaded browse
   grids and skeleton grids use `--browse-grid-columns` and the browse gap tokens.
+- Core loading placeholders live in `ui_web/src/design/Skeleton.tsx`
+  (`SkeletonRegion`, `SkeletonRows` `'song' | 'media'`, `SkeletonCards`,
+  `SkeletonToolbar`, `SkeletonHeading`, `SkeletonHome`, with
+  `components/Skeleton.tsx` re-exporting them for compatibility). Lazy
+  route/panel row variants (`'episode' | 'download' | 'setting' | 'user' |
+  'device'`) live in `ui_web/src/design/SkeletonSurfaceRows.tsx`, and the
+  mixed-search top split block lives in `ui_web/src/design/SkeletonTopBlock.tsx`
+  to stay out of the initial shell bundle. Skeleton geometry aligns directly
+  with loaded routes via shared design tokens and `--skeleton-base` /
+  `--skeleton-on-raised`, using a single outer `role="status"` region and
+  `aria-hidden="true"` only on top-level placeholder items.
 - `SearchField` supplies the density-aware input for every search. Use
   `PageToolbar` (via `ViewHeader` for route roots) for list and page placement.
   The field comes first and grows into the space left by metadata and controls.

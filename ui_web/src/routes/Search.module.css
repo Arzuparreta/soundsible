@@ -331,11 +331,6 @@
   font-size: var(--text-body);
 }
 
-.mixedSkeleton {
-  display: grid;
-  gap: var(--space-xl);
-}
-
 /* Browse cards: the shared metrics from tokens.css, never fewer than two
    columns. */
 .entityGrid {
