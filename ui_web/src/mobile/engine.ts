@@ -1,3 +1,4 @@
+import type { DiscoveryFeedReadyEvent } from '../lib/discoveryEvents';
 import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { setRequestTransport } from '../lib/http';
 import { setResourceOrigin } from '../lib/config';
@@ -13,7 +14,7 @@ interface EnginePlugin {
   cancel(options: { id: string }): Promise<void>;
   events(options: { generation: number }): Promise<void>;
   stopEvents(): Promise<void>;
-  addListener(event: 'engineEvent', callback: (data: { event: string; generation: number }) => void): Promise<PluginListenerHandle>;
+  addListener(event: 'engineEvent', callback: (data: { event: string; generation: number; data?: DiscoveryFeedReadyEvent }) => void): Promise<PluginListenerHandle>;
   deviceName(): Promise<{ name: string }>;
   scanPairing(options: { hint: string; close: string }): Promise<{ text: string }>;
 }
@@ -65,10 +66,10 @@ async function nativeFetch(url: string, init: RequestInit, timeoutMs: number): P
     }).catch(reject).finally(() => signal?.removeEventListener('abort', cancel));
   });
 }
-export async function watchEngine(callback: (event: string) => void): Promise<() => void> {
+export async function watchEngine(callback: (event: string, data?: DiscoveryFeedReadyEvent) => void): Promise<() => void> {
   const snapshot = active;
   const listener = await engine.addListener('engineEvent', event => {
-    if (active === snapshot && event.generation === snapshot.generation) callback(event.event);
+    if (active === snapshot && event.generation === snapshot.generation) callback(event.event, event.data);
   });
   try { await engine.events({ generation: snapshot.generation }); }
   catch (error) { await listener.remove(); throw error; }

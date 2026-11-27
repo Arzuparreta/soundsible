@@ -115,6 +115,24 @@ checking both SDK fields before another release reaches signed APK verification.
 - [x] Domain association published through PR Arzuparreta.github.io #11;
       HTTPS 200/application-json response checked with the correct certificate.
 
+## November alpha audit follow-up
+
+The [27 November audit](ALPHA_AUDIT_2026-11-27.md) led to bounded native
+collection playback with continuation, confirmation of the selected Radio
+seed, independent downloads and bookmarks refreshes, and catalogue artist
+results in Android library search. The Library opens saved artists and albums
+through the shared bookmark list, offers playlist creation from the empty
+landing page, and receives typed New Releases refreshes. Offline copy changes
+are pushed to the WebView. Active copies still use progress polling, and the
+foreground transition revalidates local availability.
+
+Oversized local queues retain a short listening history and refill on the
+native player, including when the Activity is hidden. The MediaSession size
+limits still apply to each batch. The remote device protocol retains its
+existing queue window. For an oversized native queue, shuffle continues by
+shuffled batches, and repeating the active queue or transferring playback
+uses the entries currently loaded in the player.
+
 ## Commands
 
 - JDK21 `/home/arsu/.cache/soundsible/android-toolchain/jdk`, SDK

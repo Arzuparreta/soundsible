@@ -32,7 +32,7 @@ import { openNativeDjPlacement } from './DjPlacement';
 import { openNativeLyrics } from './Lyrics';
 import { openNativeMetadataEditor } from './metadataEditor';
 import { nativePlaylistActions, nativePlaylistOccurrenceActions, createNativePlaylist } from './playlistActions';
-import { savedEntryForIdentity } from '../lib/saved';
+import { buildSavedIdentityIndex, savedEntryInIndex } from '../lib/saved';
 import type { SavedEntry, Track } from '../types/music';
 import { registerArtworkMetadata } from '../lib/media';
 import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
@@ -104,11 +104,21 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   }
   async function startRadio(track: Track) {
     const captured = epoch;
-    await play([track], 0);
-    if (captured !== epoch || !user() || stale()) return;
+    const target = remote.control.target();
+    const previous = shown();
+    const previousKey = previous?.items[previous.index]?.key;
+    const seed = programTrack(track);
+    if (!seed) return;
+    authFailureHandled = false;
+    vibrate();
+    try {
+      await execute({ action: 'queue', index: 0, tracks: [seed] });
+    } catch { return; }
+    if (captured !== epoch || target !== remote.control.target() || !user() || stale()) return;
     const current = shown();
-    if (!current?.queueToken) return;
+    if (!current?.queueToken || current.items[current.index]?.id !== seed.id) return;
     const key = current.items[current.index]?.key;
+    if (!key || key === previousKey) return;
     await execute({
       action: 'radio',
       enabled: true,
@@ -151,6 +161,9 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   const [savedEntries, setSavedEntries] = createSignal<SavedEntry[]>([]);
   const [downloadItems, setDownloadItems] = createSignal<DownloadQueueItem[]>([]);
   const [savedEntities, setSavedEntities] = createSignal<SavedEntity[]>([]);
+  const [downloadsFailed, setDownloadsFailed] = createSignal(false);
+  const [bookmarksLoading, setBookmarksLoading] = createSignal(false);
+  const [bookmarksFailed, setBookmarksFailed] = createSignal(false);
   const incoming = createIncomingTrack();
   const incomingInvite = createIncomingInvite();
   const incomingSong = (): Track | null => {
@@ -167,7 +180,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   };
   function entityMenu(entry: SavedEntity, event?: MenuEvent) {
     const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
-    openContextMenu({ title: entry.name, subtitle: entry.artist, actions: [nativeEntityMark(entry, savedEntities, current, sync, () => { if (current()) setError(t('savedEntities.failed')); })] }, event);
+    openContextMenu({ title: entry.name, subtitle: entry.artist, actions: [nativeEntityMark(entry, savedEntities, current, refreshBookmarks, () => { if (current()) setError(t('savedEntities.failed')); })] }, event);
   }
   function playlistMenu(name: string, event?: MenuEvent) {
     const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
@@ -177,7 +190,8 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
     void createNativePlaylist(current, sync, () => { if (current()) setError(t('common.loadFailed')); });
   }
-  const isFavourite = (track: Track) => { const keys = trackKeys(track); return savedEntryForIdentity(savedEntries(), keys)?.favourite === true; };
+  const savedIndex = createMemo(() => buildSavedIdentityIndex(savedEntries()));
+  const isFavourite = (track: Track) => { const keys = trackKeys(track); return savedEntryInIndex(savedIndex(), keys)?.favourite === true; };
   const [surface, setSurface] = createSignal<'library' | 'search' | 'podcasts' | 'downloads' | 'migrate' | 'settings'>('library');
   const [libraryTab, setLibraryTab] = createSignal<'songs' | 'playlists'>('songs');
   const [revision, setRevision] = createSignal(0);
@@ -202,9 +216,15 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   async function restoreOffline(restoreLibrary = true) {
     const current = epoch;
     const result = await offline.command({ action: 'state', generation });
-    if (current !== epoch) return;
-    setOfflineState(result);
-    if (restoreLibrary && result.user && result.items.length) { setUser(result.user); setSnapshot(availableLibrary(result)); setStale(true); }
+    const account = user();
+    if (current !== epoch || (account && result.user && result.user.id !== account.id)) return;
+    const lostProfile = !result.user && !!offlineState()?.user && !!account;
+    if (JSON.stringify(result) !== JSON.stringify(offlineState())) setOfflineState(result);
+    if (lostProfile) { await expireSession(); return; }
+    if (restoreLibrary && stale() && !snapshot() && result.user && result.items.length) {
+      setUser(result.user);
+      setSnapshot(availableLibrary(result));
+    }
   }
   const [inviteToken, setInviteToken] = createSignal<string | null>(null);
   let username: HTMLInputElement | undefined;
@@ -214,7 +234,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   let cancelEvents: (() => void) | undefined;
   let controller = new AbortController();
   function reset(stopPlayback = true) {
-    epoch++; syncEpoch++; setInviteToken(null); discardOverlays(); dismissContextMenu(); controller.abort(); controller = new AbortController();
+    epoch++; syncEpoch++; setBookmarksLoading(false); setBookmarksFailed(false); setDownloadsFailed(false); setInviteToken(null); discardOverlays(); dismissContextMenu(); controller.abort(); controller = new AbortController();
     cancelEvents?.(); cancelEvents = undefined;
     if (stopPlayback) {
       const active = program();
@@ -239,7 +259,14 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     return expiration;
   }
   const sync = createAccountRefresh(syncOnce, () => epoch, () => !!user());
-  const acquisition = createMusicAcquisition(() => epoch, () => !!user() && !stale(), () => controller.signal, () => snapshot()?.tracks ?? [], downloadItems, sync);
+  async function refreshAccount() {
+    void refreshDownloads();
+    void refreshBookmarks();
+    await sync();
+  }
+  const acquisition = createMusicAcquisition(() => epoch, () => !!user() && !stale(), () => controller.signal, () => snapshot()?.tracks ?? [], downloadItems, async () => {
+    await Promise.all([sync(), refreshDownloads()]);
+  });
   const fileDeletion = createNativeFileDeletion(() => epoch, () => !!user() && !stale(), () => controller.signal,
     () => [...(snapshot()?.tracks ?? []), ...(offlineState()?.user?.id === user()?.id ? offlineState()?.items.map(item => item.track) ?? [] : [])], async id => {
       const owner = epoch;
@@ -257,6 +284,24 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       }
     }, sync);
   const isActive = (track: Track) => nativePlayingTrack(shown(), snapshot()?.tracks ?? [], track);
+  const refreshDownloads = createAccountRefresh(async () => {
+    const owner = epoch;
+    try {
+      const result = await request<{ queue: DownloadQueueItem[] }>('/api/downloader/queue/status', { signal: controller.signal, cache: 'no-store' });
+      if (!Array.isArray(result.queue)) throw new Error('Invalid download snapshot');
+      if (owner === epoch) { setDownloadItems(result.queue); setDownloadsFailed(false); }
+    } catch { if (owner === epoch) setDownloadsFailed(true); }
+  }, () => epoch, () => !!user());
+  const refreshBookmarks = createAccountRefresh(async () => {
+    const owner = epoch;
+    setBookmarksLoading(true);
+    try {
+      const result = await request<{ entities: SavedEntity[] }>('/api/library/saved-entities', { signal: controller.signal, cache: 'no-store' });
+      if (!Array.isArray(result.entities)) throw new Error('Invalid bookmark snapshot');
+      if (owner === epoch) { setSavedEntities(result.entities); setBookmarksFailed(false); }
+    } catch { if (owner === epoch) setBookmarksFailed(true); }
+    finally { if (owner === epoch) setBookmarksLoading(false); }
+  }, () => epoch, () => !!user());
   async function syncOnce() {
     if (!user()) return;
     const current = epoch;
@@ -265,16 +310,16 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       const state = await request<{ requires_login: boolean; user: User | null }>('/api/auth/state', { signal: controller.signal });
       if (current !== epoch || job !== syncEpoch) return;
       if (!state.user || (user() && user()!.id !== state.user.id)) { await expireSession(); return; }
-      const [collection, entities, downloads] = await Promise.all([
-        readCollection(controller.signal),
-        request<{ entities: SavedEntity[] }>('/api/library/saved-entities', { signal: controller.signal, cache: 'no-store' }),
-        request<{ queue: DownloadQueueItem[] }>('/api/downloader/queue/status', { signal: controller.signal, cache: 'no-store' }),
-      ]);
+      const collection = await readCollection(controller.signal);
       if (current !== epoch || job !== syncEpoch) return;
-      if (!Array.isArray(downloads.queue)) throw new Error('Invalid download snapshot');
-      if (!Array.isArray(entities.entities)) throw new Error('Invalid entity bookmark snapshot');
-      registerArtworkMetadata(collection.files);
-      setSnapshot(collection.snapshot); setSavedEntries(collection.saved); setSavedEntities(entities.entities); setDownloadItems(downloads.queue); setRevision(n => n + 1); setStale(false); setError('');
+      if (snapshot() !== collection.snapshot) {
+        registerArtworkMetadata(collection.files);
+        setSnapshot(collection.snapshot);
+        setSavedEntries(collection.saved);
+        setRevision(n => n + 1);
+      }
+      setStale(false);
+      setError('');
     } catch (failure) {
       if (current !== epoch || job !== syncEpoch) return;
       if (failure instanceof ApiError && failure.status === 401) await expireSession();
@@ -296,17 +341,19 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     if (!state.user) { await expireSession(); return; }
     if (user() && user()!.id !== state.user.id) { await expireSession(); return; }
     setUser(state.user);
-    await sync();
+    await refreshAccount();
     if (current !== epoch || !user()) return;
-    await attachEvents(current);
+    try { await attachEvents(current); } catch { if (current === epoch) setEventsOnline(false); }
   }
   async function attachEvents(current: number) {
     cancelEvents?.(); cancelEvents = undefined;
-    const stop = await watchEngine(event => {
+    const stop = await watchEngine((event, data) => {
       if (current !== epoch || !user()) return;
-      if (event === 'connect') { setEventsOnline(true); void sync(); }
+      if (event === 'connect') { setEventsOnline(true); void refreshAccount(); }
       else if (event === 'disconnect' || event === 'connect_error') setEventsOnline(false);
-      else if (event === 'discovery_feed_ready') dispatchDiscoveryFeedReady({});
+      else if (event === 'discovery_feed_ready') dispatchDiscoveryFeedReady(data);
+      else if (event === 'downloader_update') void refreshDownloads();
+      else if (event === 'saved_entities_updated') void refreshBookmarks();
       else void sync();
     });
     if (current !== epoch) stop(); else cancelEvents = stop;
@@ -326,7 +373,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   async function refresh() {
     if (busy()) return;
     const current = epoch;
-    if (user()) await sync(); else await revalidateIdentity();
+    if (user()) await refreshAccount(); else await revalidateIdentity();
     if (current === epoch && user() && !eventsOnline()) {
       try { await attachEvents(current); } catch { if (current === epoch) setEventsOnline(false); }
     }
@@ -539,19 +586,39 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     setUnauthorizedHandler(() => { void expireSession(); });
     void engine.state().then(state => {
       generation = state.generation; useEngine(state); bindPrograms(); setOrigin(state.origin); setServer(state.origin);
-      if (state.origin) void restoreOffline().catch(() => {}).then(() => revalidateIdentity());
-    }).finally(() => window.__SOUNDSIBLE_BOOT__?.complete());
-    let lastDownloadPoll = 0;
-    let lastOfflinePoll = 0;
-    const offlineInterval = setInterval(() => {
-      if (user() && document.visibilityState === 'visible' && downloadItems().some(item => item.status === 'pending' || item.status === 'downloading') && Date.now() - lastDownloadPoll >= 1000) { lastDownloadPoll = Date.now(); void sync(); }
-      const preparing = offlineState()?.items.some(item => item.state === 'queued' || item.state === 'downloading');
-      if (generation >= 0 && document.visibilityState === 'visible' && Date.now() - lastOfflinePoll >= (preparing ? 1000 : 10000)) { lastOfflinePoll = Date.now(); void offlineCommand({ action: 'state' }); }
+      if (state.origin) {
+        const owner = epoch;
+        void revalidateIdentity().then(() => {
+          if (owner === epoch) return restoreOffline();
+        }).catch(() => {});
+      }
+    }).catch(() => setError(t('android.connectFailed'))).finally(() => window.__SOUNDSIBLE_BOOT__?.complete());
+    const refreshOffline = createAccountRefresh(async () => {
+      await restoreOffline().catch(() => {});
+    }, () => epoch, () => generation >= 0 && !!server());
+    let disposed = false;
+    let offlineListener: { remove(): Promise<void> } | undefined;
+    void offline.addListener('offlineChanged', event => {
+      if (!disposed && event.generation === generation && document.visibilityState === 'visible') void refreshOffline();
+    }).then(listener => { if (disposed) void listener.remove(); else offlineListener = listener; }).catch(() => {});
+    const activePoll = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      if (user() && !downloadsFailed() && downloadItems().some(item => item.status === 'pending' || item.status === 'downloading')) void refreshDownloads();
+      if (offlineState()?.items.some(item => item.state === 'queued' || item.state === 'downloading')) void refreshOffline();
     }, 1000);
-    const interval = setInterval(() => { if (user() && document.visibilityState === 'visible') void sync(); }, 30000);
-    const resume = () => { if (user() && document.visibilityState === 'visible') void sync(); };
+    const interval = setInterval(() => {
+      if (!user() || document.visibilityState !== 'visible') return;
+      void sync();
+      if (!eventsOnline() || stale() || downloadsFailed()) void refreshDownloads();
+      if (!eventsOnline() || stale() || bookmarksFailed()) void refreshBookmarks();
+    }, 30000);
+    const resume = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (user()) void refreshAccount();
+      void refreshOffline();
+    };
     document.addEventListener('visibilitychange', resume);
-    onCleanup(() => { clearInterval(interval); clearInterval(offlineInterval); document.removeEventListener('visibilitychange', resume); reset(false); runtime.unbind(); remoteRuntime.unbind(); setUnauthorizedHandler(null); });
+    onCleanup(() => { disposed = true; void offlineListener?.remove(); clearInterval(interval); clearInterval(activePoll); document.removeEventListener('visibilitychange', resume); reset(false); runtime.unbind(); remoteRuntime.unbind(); setUnauthorizedHandler(null); });
   });
   let scrollContainer: HTMLElement | undefined;
   return <main ref={scrollContainer} class={user() || program()?.queue.length ? styles.connected : styles.start} data-testid={server() ? 'android-configured' : 'android-unconfigured'}>
@@ -628,7 +695,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
         {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={activeSurface() === 'library'} onClick={() => selectSurface('library')}>{t('nav.library')}</button><button aria-pressed={activeSurface() === 'search'} data-android-discover onClick={() => selectSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={activeSurface() === 'podcasts'} onClick={() => selectSurface('podcasts')}>{t('nav.podcasts')}</button><button data-android-downloads aria-pressed={activeSurface() === 'downloads'} onClick={() => selectSurface('downloads')}>{t('downloads.title')}</button><button data-android-migrate aria-pressed={activeSurface() === 'migrate'} onClick={() => selectSurface('migrate')}>{t('migrate.title')}</button><button data-android-live onClick={() => { const owner = epoch; openNativeLive(() => generation, () => owner === epoch && !!user(), user()?.display_name || user()?.username || 'DJ', () => void expireSession()); }}>{t('live.title')}</button><button data-android-settings aria-pressed={activeSurface() === 'settings'} onClick={() => selectSurface('settings')}>{t('nav.settings')}</button></nav>
           <Show when={catalogSurface()} keyed>{mode => <CatalogSearch detailOnly={mode === 'detail'} closeDetailToken={detailReset()} onDetailChange={open => { if (open) setDetailOpen(true); else closeEntityPath(); }} onPlayOnDevice={playOnDevice} onStartRadio={startRadio} onStartDj={startDj} openRequest={entityRequest()} onRequestHandled={id => { if (entityRequest()?.id === id) setEntityRequest(null); }} scrollTarget={() => scrollContainer} offlineMenuActions={tracks => offlineActions(tracks, offlineState, offlineCommand, () => generation)} onResolvedMenu={(track, event, actions) => songMenu(track, event, undefined, actions, false, 'discover')} queueActions={track => programQueueActions(track, shown, shownPending, execute)} savedEntities={savedEntities()} onEntityMenu={entityMenu} onPlayCollection={play} history={searchHistory} generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={shown()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}</Show>
-          <div hidden={Boolean(detailHost())}>          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={null}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setDetailHost(null); setDetailOpen(false); setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser onPlayOnDevice={playOnDevice} generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={shown()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettings library={{ trackCount: () => snapshot()?.tracks.length ?? 0, sync,
+          <div hidden={Boolean(detailHost())}>          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={null}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setDetailHost(null); setDetailOpen(false); setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><Show when={downloadsFailed()}><p role="alert">{t('common.loadFailed')} <Button variant="secondary" size="sm" onClick={() => void refreshDownloads()}>{t('common.retry')}</Button></p></Show><Show when={!downloadsFailed() || downloadItems().length}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={refreshDownloads} /></Show></Show>}><PodcastBrowser onPlayOnDevice={playOnDevice} generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={shown()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettings library={{ trackCount: () => snapshot()?.tracks.length ?? 0, sync,
               onImport: () => { selectSurface('migrate'); } }} online={() => eventsOnline() && !stale()} server={server} generation={() => generation} subsonic={{ identity: () => epoch, accountId: () => user()?.id ?? '', username: () => user()?.username ?? '', origin, available: () => !stale() && !!user(), copy: nativeCopy(() => generation) }} playback={{ state: program(), pending: programPending(), available: !stale(), command: runtime.execute }} feedback={props.feedback} appearance={props.appearance} busy={busy()} user={user()!} identity={() => epoch} available={() => !stale()} signal={controller.signal} history={searchHistory} onLogout={() => leave(false)} onUser={async updated => {
               const owner = epoch;
               if (updated.id !== user()?.id) throw new Error('Account changed');
@@ -637,11 +704,11 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
               await sync();
               if (owner === epoch && user()) await attachEvents(owner);
             }} /></Show>}>
-          <LibraryBrowser initialTab={libraryTab()} accountGeneration={generation} onOpenEntityPath={openEntityPath} onEntityMenu={entityMenu} onPlaylistMenu={playlistMenu} onCreatePlaylist={newPlaylist} isFavourite={isFavourite} snapshot={data()} isActive={isActive} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={shown()?.id} onPlay={play}
+          <LibraryBrowser bookmarks={savedEntities()} bookmarksLoading={bookmarksLoading()} bookmarksFailed={bookmarksFailed()} retryBookmarks={refreshBookmarks} initialTab={libraryTab()} accountGeneration={generation} onOpenEntityPath={openEntityPath} onEntityMenu={entityMenu} onPlaylistMenu={playlistMenu} onCreatePlaylist={newPlaylist} isFavourite={isFavourite} snapshot={data()} isActive={isActive} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={shown()?.id} onPlay={play}
           onManageOffline={() => { const captured = generation; openOfflineManager(offlineState, command => captured === generation ? offlineCommand(command) : Promise.resolve()); }}
           onCollectionMenu={(tracks, title, event, context) => {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
-            openContextMenu({ title, actions: [...nativeDjSourceActions(`${context?.kind ?? 'collection'}:${context?.id ?? title}`, title, tracks, shown, current, shownPending, execute), ...(context?.bookmark ? [nativeEntityMark(context.bookmark, savedEntities, current, sync, () => { if (current()) setError(t('savedEntities.failed')); })] : []), ...(context?.kind === 'playlists' ? nativePlaylistActions(context.id, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []), ...offlineActions(tracks, offlineState, offlineCommand, () => generation)] }, event);
+            openContextMenu({ title, actions: [...nativeDjSourceActions(`${context?.kind ?? 'collection'}:${context?.id ?? title}`, title, tracks, shown, current, shownPending, execute), ...(context?.bookmark ? [nativeEntityMark(context.bookmark, savedEntities, current, refreshBookmarks, () => { if (current()) setError(t('savedEntities.failed')); })] : []), ...(context?.kind === 'playlists' ? nativePlaylistActions(context.id, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []), ...offlineActions(tracks, offlineState, offlineCommand, () => generation)] }, event);
           }}
           onMenu={songMenu} />
           </Show></div></>}

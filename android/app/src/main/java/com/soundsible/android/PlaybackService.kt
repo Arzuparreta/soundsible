@@ -48,6 +48,70 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var radio: RadioProgram
     private lateinit var autoplay: AutoplayProgram
     private lateinit var podcasts: PodcastProgressStore
+    private data class QueueContinuation(
+        val generation: Long,
+        val token: String,
+        val kind: String?,
+        val id: String?,
+        val pages: ArrayDeque<String>,
+        val retiredSources: MutableSet<String> = mutableSetOf(),
+    )
+    private var queueContinuation: QueueContinuation? = null
+
+    private fun continueQueue() {
+        val next = queueContinuation ?: return
+        if (connection.generation != next.generation || dj != null || ProgramQueue.programToken(player) != next.token) {
+            queueContinuation = null
+            return
+        }
+        val index = player.currentMediaItemIndex
+        val ended = player.playbackState == Player.STATE_ENDED
+        if (!ended && (player.shuffleModeEnabled || player.mediaItemCount - index > 8)) return
+        val rows = nextRows(next) ?: return
+        // Retain a short history. Preserve manual requests if a listener has moved one behind the current song.
+        val remove = (index - 32).coerceAtLeast(0)
+        val removable = (0 until remove).count { ProgramQueue.lane(player, it) == "context" }
+        if (!ended && player.mediaItemCount - removable + rows.length() > ProgramQueue.LIMIT) return
+        val items = try {
+            ProgramQueue.items(connection, rows, next.token, next.kind, next.id, lane = "context")
+        } catch (_: Exception) {
+            queueContinuation = null
+            return
+        }
+        next.pages.removeFirst()
+        if (next.pages.isEmpty()) queueContinuation = null
+        if (ended) {
+            player.setMediaItems(items, 0, podcasts.position(items.first()))
+            player.prepare()
+        } else {
+            var end = remove
+            while (end > 0) {
+                var start = end
+                while (start > 0 && ProgramQueue.lane(player, start - 1) == "context") start--
+                if (start != end) player.removeMediaItems(start, end)
+                end = start - 1
+            }
+            player.addMediaItems(items)
+        }
+    }
+
+    private fun nextRows(next: QueueContinuation): org.json.JSONArray? {
+        while (next.pages.isNotEmpty()) {
+            val rows = org.json.JSONArray(next.pages.first())
+            if (next.retiredSources.isEmpty()) return rows
+            val playable = org.json.JSONArray()
+            for (i in 0 until rows.length()) {
+                val row = rows.getJSONObject(i)
+                if (row.optString("source") != "local" || row.optString("id") !in next.retiredSources) playable.put(row)
+            }
+            if (playable.length() > 0) return playable
+            next.pages.removeFirst()
+        }
+        queueContinuation = null
+        return null
+    }
+
+    private val refillQueue = Runnable(::continueQueue)
     private val progressTicker = object : Runnable { override fun run() { if (session != null) { savePodcast(); maybeRefill(); main.postDelayed(this, 5000) } } }
     private fun savePodcast() { if (::player.isInitialized && ::podcasts.isInitialized) podcasts.save(player.currentMediaItem, player.currentPosition, player.duration, player.playbackState == Player.STATE_ENDED) }
     private val catalogCache = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -84,6 +148,7 @@ class PlaybackService : MediaLibraryService() {
     }
     /** On the player looper; does not touch account generation, cookie or library. */
     private fun closeProgram() {
+        queueContinuation = null
         pendingImport?.invoke(); pendingImport = null
         pendingCarRadio = null
         djRefiner?.clear()
@@ -150,6 +215,7 @@ class PlaybackService : MediaLibraryService() {
     private fun retireSource(args: Bundle) {
         require(args.getLong("generation", -1) == connection.generation)
         val id = args.getString("id") ?: error("NO_SOURCE")
+        queueContinuation?.retiredSources?.add(id)
         val rows = (0 until player.mediaItemCount).map { index ->
             val item = player.getMediaItemAt(index)
             SourceRetirement.Reference(item.mediaId, item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) ?: "")
@@ -338,6 +404,15 @@ class PlaybackService : MediaLibraryService() {
             }
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { leveling.shuffle = shuffleModeEnabled }
             override fun onEvents(player: Player, events: Player.Events) {
+                if (queueContinuation != null && events.containsAny(
+                        Player.EVENT_MEDIA_ITEM_TRANSITION,
+                        Player.EVENT_POSITION_DISCONTINUITY,
+                        Player.EVENT_PLAYBACK_STATE_CHANGED,
+                        Player.EVENT_TIMELINE_CHANGED,
+                    )) {
+                    main.removeCallbacks(refillQueue)
+                    main.post(refillQueue)
+                }
                 NativeProgramOutput.playbackChanged(player.isPlaying)
                 if (::deviceSession.isInitialized) {
                     val transport = events.containsAny(
@@ -355,7 +430,9 @@ class PlaybackService : MediaLibraryService() {
                         pendingCarRadio = null; autoplay.suspend(); radio.start("balanced")
                     }
                 }
-                previews.sync(); radio.sync(); autoplay.sync(); leveling.sync(player.mediaItemCount > 0); mixing.sync(player.mediaItemCount > 0); savePodcast()
+                previews.sync(); radio.sync()
+                if (queueContinuation == null) autoplay.sync()
+                leveling.sync(player.mediaItemCount > 0); mixing.sync(player.mediaItemCount > 0); savePodcast()
                 val keys = (0 until player.mediaItemCount).map { ProgramQueue.key(player, it) }.toSet()
                 podcastSources.entries.filter { it.value !in keys }.forEach { it.key.cancel() }
             }
@@ -601,7 +678,11 @@ class PlaybackService : MediaLibraryService() {
             djPlanner.start(org.json.JSONArray(args.getString("sources") ?: "[]"), args.getBoolean("fromCurrent", true))
         } else if (args.getString("action") == "queue") {
             require(args.getLong("generation", -1) == connection.generation)
-            val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"), lane = "context")
+            val replacement = args.getString("replacement").orEmpty()
+            val kind = args.getString("contextKind")
+            val id = args.getString("contextId")
+            val pages = ProgramQueueWindow.staged.remove(replacement)
+            val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), replacement, kind, id, lane = "context")
             val index = args.getInt("index", -1); require(index in items.indices)
             val position = args.getLong("positionMs", -1)
             if (position < 0 && (dj != null || djPlanner.busy()) && items[index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true) {
@@ -612,7 +693,9 @@ class PlaybackService : MediaLibraryService() {
             autoplay.clear()
             radio.clear()
             player.shuffleModeEnabled = args.getBoolean("shuffle")
+            queueContinuation = pages?.let { QueueContinuation(connection.generation, replacement, kind, id, it) }
             player.setMediaItems(items, index, if (position >= 0) position else podcasts.position(items[index])); player.prepare(); player.play()
+            if (queueContinuation != null) main.post(refillQueue)
         } else if (args.getString("action") == "metadata") {
             ProgramMetadata.apply(player, connection, args, artwork::clear)
         } else if (args.getString("action") == "retireSource") {
@@ -630,6 +713,7 @@ class PlaybackService : MediaLibraryService() {
                 val profile = args.getString("profile") ?: "balanced"
                 require(profile in listOf("familiar", "balanced", "explore"))
                 if (dj != null) exitDj(keepUserRequests = false)
+                queueContinuation = null
                 autoplay.suspend(); radio.start(profile)
             } else { radio.stop(); autoplay.sync() }
         } else if (args.getString("action") == "stop") {

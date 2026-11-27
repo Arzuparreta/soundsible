@@ -185,7 +185,7 @@ public class ConnectionTest {
             assertEquals("false", web.evaluate(scenario, "document.body.innerText.includes('owner saved song')"));
             assertEquals("false", web.evaluate(scenario, "document.body.innerText.includes('owner private song')"));
             assertEquals("false", web.evaluate(scenario, "!!document.querySelector('audio') || !!navigator.serviceWorker?.controller"));
-            awaitText(web, scenario, "Development build:");
+            assertEquals("false", web.evaluate(scenario, "document.body.innerText.includes('Development build:')"));
             web.revealLibraryTrack(scenario, "member-track");
             String coverReady = "(()=>{const row=Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')?.closest('[data-music-list-row]');const cover=row?.querySelector('[data-row-cover]');const img=cover?.querySelector('img');window.__fixtureCoverSource=img?.currentSrc||img?.getAttribute('src')||(cover?/url\\(\"([^\"]+)\"\\)/.exec(getComputedStyle(cover).backgroundImage)?.[1]:null)||null;return !!window.__fixtureCoverSource})()";
             long sourceDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);

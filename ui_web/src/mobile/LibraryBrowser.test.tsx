@@ -108,3 +108,33 @@ it('asks the engine for the chosen album order and genre, and offers to clear a 
   fireEvent.click(view.getByRole('button', { name: 'All albums' }));
   await waitFor(() => expect(view.getByText('Album')).toBeTruthy());
 });
+
+it('offers playlist creation on the empty landing page', () => {
+  const create = vi.fn();
+  const view = render(() => <LibraryBrowser snapshot={{ tracks: [] }} revision={0} onCreatePlaylist={create} />);
+  fireEvent.click(view.getByText('Playlists'));
+  fireEvent.click(view.getByRole('button', { name: 'New playlist' }));
+  expect(create).toHaveBeenCalledOnce();
+});
+
+it('opens the stored catalogue destination of an album with no acquired songs', () => {
+  const onOpen = vi.fn();
+  const destination = '/album/Fixture?deezer_id=123&view=discover';
+  const view = render(() => <LibraryBrowser snapshot={{ tracks: [] }} revision={0}
+    bookmarks={[{ kind: 'album', name: 'Fixture', artist: 'Artist', destination }]} onOpenEntityPath={onOpen} />);
+  fireEvent.click(view.getByRole('button', { name: 'Bookmarks' }));
+  fireEvent.click(view.getByRole('link', { name: 'Fixture' }));
+  expect(onOpen).toHaveBeenCalledWith(destination);
+});
+
+it('finds artists from catalogue credits alongside ranked songs', async () => {
+  request.mockImplementation((path: string) => Promise.resolve(path === '/api/library/artists'
+    ? { artists: [{ id: 'performer', name: 'Guest performer', track_count: 1 }] }
+    : { track_ids: ['a'] }));
+  const view = render(() => <LibraryBrowser snapshot={{ tracks: [a] }} revision={0} />);
+  fireEvent.click(view.getByRole('button', { name: 'Search songs and artists' }));
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'guest' } });
+  fireEvent.click(await view.findByText('Guest performer'));
+  await waitFor(() => expect(view.getByRole('heading', { name: 'Guest performer' })).toBeTruthy());
+  expect(request.mock.calls.some(([path]) => path === '/api/library/artists/performer')).toBe(true);
+});

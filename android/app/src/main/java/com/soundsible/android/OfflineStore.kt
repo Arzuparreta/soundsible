@@ -68,16 +68,17 @@ class OfflineStore private constructor(private val context: Context) {
         require(epoch == connection.generation)
         if (prefs.getString("origin", "") != connection.origin) return JSONObject().put("items", JSONArray()).put("user", JSONObject.NULL)
         val items = JSONArray(); var used = 0L
-        database.rawQuery("SELECT id,metadata,state,bytes,total,error FROM copies ORDER BY rowid", null).use { cursor ->
+        database.rawQuery("SELECT id,metadata,state,bytes,total,error,digest FROM copies ORDER BY rowid", null).use { cursor ->
             while (cursor.moveToNext()) {
                 val id = cursor.getString(0)
-                val complete = cursor.getString(2) == "ready" && local(id,epoch) != null
+                val complete = cursor.getString(2) == "ready" && verifiedLocal(id, cursor.getLong(4), cursor.getString(6)) != null
                 val status = if (complete) "ready" else if (cursor.getString(2) == "ready") "error" else cursor.getString(2)
                 if (status == "ready") used += cursor.getLong(4)
                 else if (cursor.getString(5) == "storage") used += OfflineFileRemoval.retainedBytes(file(id), part(id))
                 items.put(JSONObject().put("track", JSONObject(cursor.getString(1))).put("state", status).put("bytes", cursor.getLong(3)).put("total", cursor.getLong(4)).put("error", if (status == "error" && cursor.getString(2) == "ready") "integrity" else cursor.getString(5)))
             }
         }
+        require(epoch == connection.generation)
         return JSONObject().put("items", items).put("user", prefs.getString("user", null)?.let { JSONObject(it) } ?: JSONObject.NULL)
             .put("usedBytes", used).put("limitBytes", prefs.getLong("limit", 2L * 1024 * 1024 * 1024))
             .put("playlists", JSONObject(prefs.getString("playlists", "{}") ?: "{}"))
@@ -122,6 +123,7 @@ class OfflineStore private constructor(private val context: Context) {
             database.setTransactionSuccessful()
         } finally { database.endTransaction() }
         prefs.edit().putString("playlists", playlists.toString()).apply()
+        changed()
     }
     /** Refresh labels of existing copies without changing their bytes, digest or download ticket. */
     @Synchronized fun updateMetadata(epoch: Long, rows: JSONArray) {
@@ -242,10 +244,18 @@ class OfflineStore private constructor(private val context: Context) {
         requireProfile(epoch)
         database.rawQuery("SELECT total,digest FROM copies WHERE id=? AND state='ready'", arrayOf(id)).use {
             if (!it.moveToFirst()) return null
-            val target=file(id)
-            if (!target.exists() || target.length()!=it.getLong(0) || (verified[id] != target.lastModified() && digest(target)!=it.getString(1))) { invalid(id); return null }
-            verified[id] = file(id).lastModified(); return target
+            return verifiedLocal(id, it.getLong(0), it.getString(1))
         }
+    }
+    private fun verifiedLocal(id: String, length: Long, checksum: String?): File? {
+        val target = file(id)
+        val modified = target.lastModified()
+        if (!target.exists() || target.length() != length || (verified[id] != modified && digest(target) != checksum)) {
+            invalid(id)
+            return null
+        }
+        verified[id] = modified
+        return target
     }
     companion object {
         @Volatile private var instance: OfflineStore? = null

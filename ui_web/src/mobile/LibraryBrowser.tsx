@@ -20,17 +20,19 @@ import type { CatalogAlbum, CatalogArtist, LibrarySettings, PlaylistMap, Track }
 import { availableLibrary, type OfflineState } from './offline';
 import { openContextMenu } from '../lib/contextMenu';
 import { api } from '../lib/api';
-import { albumFilter, albumSort, filterTracks, libraryFilter, librarySort, setAlbumFilter, setAlbumSort, setLibraryFilter, setLibrarySort, sortTracks } from '../lib/libraryView';
+import { albumFilter, albumSort, catalogArtists, filterTracks, libraryFilter, librarySort, setAlbumFilter, setAlbumSort, setLibraryFilter, setLibrarySort, sortTracks } from '../lib/libraryView';
 import { ALBUM_SORTS, NO_ALBUM_FILTER, albumBrowseQuery, collateAlbums } from '../lib/albumBrowse';
 import type { MenuAction } from '../components/ActionMenu';
 import styles from './AndroidStart.module.css';
-import { filterLocalCollection, searchLibrary, trackSearchFields } from '../lib/librarySearch';
+import Button from '../components/Button';
+import { SavedEntityList } from '../components/SavedEntityList';
+import { filterLocalCollection, matchesSavedEntity, searchLibrary, trackSearchFields } from '../lib/librarySearch';
 import NativeNewReleases from './NativeNewReleases';
 
 export interface BrowseSnapshot { podcast_subscriptions?: import('../types/podcast').PodcastSubscription[]; podcast_tracks?: Track[]; tracks: Track[]; playlists?: PlaylistMap; settings?: LibrarySettings }
 /** Account browse surface; writes are delegated, sharing rows/artwork without the web player. */
-export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlists'; snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number, context?: ProgramContext) => void; activeId?: string; isActive?: (track: Track) => boolean; onMenu?: (track: Track, event?: MenuEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MenuEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MenuEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity }) => void; onOpenEntityPath?: (path: string) => void; accountGeneration?: number }) {
-  const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists' | 'favourites'>(props.initialTab ?? 'songs');
+export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlists'; bookmarks?: SavedEntity[]; bookmarksLoading?: boolean; bookmarksFailed?: boolean; retryBookmarks?: () => void; snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number, context?: ProgramContext) => void; activeId?: string; isActive?: (track: Track) => boolean; onMenu?: (track: Track, event?: MenuEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MenuEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onEntityMenu?: (entry: SavedEntity, event?: MenuEvent) => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MenuEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity }) => void; onOpenEntityPath?: (path: string) => void; accountGeneration?: number }) {
+  const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists' | 'favourites' | 'bookmarks'>(props.initialTab ?? 'songs');
   const [collection, setCollection] = createSignal<{ title: string; ids: string[]; kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity } | null>(null);
   const [onlyAvailable, setOnlyAvailable] = createSignal(false);
   const library = createMemo<BrowseSnapshot>(() => (props.disconnected || onlyAvailable()) && props.offline ? availableLibrary(props.offline) : props.snapshot);
@@ -52,7 +54,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
       ? Promise.resolve({ albums: collateAlbums(localCollections('albums').map(group => ({ id: group.id, title: group.title, album_artist: group.artist, track_count: group.ids.length, duration: 0, is_compilation: false })), albumSort()) })
       // Ordering and genre/year filtering are the engine's job, as on the web; only the alphabet is collated here.
       : api.getLibraryAlbums(albumBrowseQuery(albumSort(), albumFilter())).then(albums => ({ albums: collateAlbums(albums, albumSort()) })));
-  const [artists, { refetch: retryArtists }] = createResource(() => tab() === 'artists' ? `${props.revision}:${props.disconnected}:${onlyAvailable()}:${props.offline?.items.filter(item => item.state === 'ready').map(item => item.track.id).join(',')}` : false,
+  const [artists, { refetch: retryArtists }] = createResource(() => (tab() === 'artists' || tab() === 'songs' && !collection() && search.query()) ? `${props.revision}:${props.disconnected}:${onlyAvailable()}:${props.offline?.items.filter(item => item.state === 'ready').map(item => item.track.id).join(',')}` : false,
     (): Promise<{ artists: CatalogArtist[] }> => props.disconnected || onlyAvailable() ? Promise.resolve({ artists: localCollections('artists').map(group => ({ id: group.id, name: group.title, track_count: group.ids.length, album_count: 0 })) }) : request<{ artists: CatalogArtist[] }>('/api/library/artists'));
   const collectionTracks = createMemo(() => {
     registerArtworkMetadata(library().tracks);
@@ -67,11 +69,15 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
     return !collection() && tab() === 'songs' ? sortTracks(filterTracks(rows, libraryFilter()), librarySort(),
       new Set(librarySort() === 'fav' ? rows.filter(track => props.isFavourite?.(track)).map(track => track.id) : [])) : rows;
   });
+  const searchableArtists = createMemo(() => catalogArtists(artists.error ? [] : artists()?.artists ?? []));
+  const ranked = createMemo(() => !collection() && tab() === 'songs' && search.query()
+    ? searchLibrary(sourceTracks(), searchableArtists(), query()) : null);
+  const artistMatches = createMemo(() => ranked()?.flatMap(result => result.kind === 'artist' ? [result.artist] : []) ?? []);
+  const bookmarkMatches = (entry: SavedEntity) => matchesSavedEntity(entry, search.query());
   const tracks = createMemo(() => {
     const rows = sourceTracks();
     const normalized = search.query();
-    if (!normalized || collection() || tab() !== 'songs') return filterLocalCollection(rows, normalized, trackSearchFields);
-    return searchLibrary(rows, [], query()).flatMap(result => result.kind === 'track' ? [result.track] : []);
+    return ranked()?.flatMap(result => result.kind === 'track' ? [result.track] : []) ?? filterLocalCollection(rows, normalized, trackSearchFields);
   });
   const names = createMemo(() => playlistNames(library().playlists ?? {}, library().settings?.playlist_order));
   const albumRows = () => albums.error ? [] : albums()?.albums ?? [];
@@ -113,6 +119,8 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
     cancelDetail(); setCollection(null); search.reset(); setDetailError(false); setTab(next);
   };
   const closeCollection = () => { cancelDetail(); setCollection(null); search.reset(); setDetailError(false); };
+  createEffect(on(() => props.initialTab, value => { if (value) selectTab(value); }, { defer: true }));
+  createEffect(() => { if (props.disconnected && tab() === 'bookmarks') selectTab('songs'); });
   registerNativeBack(() => {
     if (collection()) { closeCollection(); return true; }
     if (query()) { search.reset(); return true; }
@@ -140,20 +148,20 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
     ] }, event);
   }
   return <section class={styles.library} data-testid="android-library">
-    <p class={styles.notice}>{t('android.browseOnly')}</p>
     <nav aria-label={t('library.title')} class={styles.tabs}>
-      <For each={[...(['songs', 'albums', 'artists', 'playlists'] as const), ...(props.isFavourite ? ['favourites' as const] : [])]}>{item =>
-        <button type="button" aria-pressed={tab() === item} onClick={() => selectTab(item)}>{item === 'playlists' ? t('playlists.title') : t(`library.${item}`)}</button>
+      <For each={[...(['songs', 'albums', 'artists', 'playlists'] as const), ...(props.isFavourite ? ['favourites' as const] : []), ...(!props.disconnected && props.bookmarks ? ['bookmarks' as const] : [])]}>{item =>
+        <button type="button" aria-pressed={tab() === item} onClick={() => selectTab(item)}>{item === 'playlists' ? t('playlists.title') : item === 'bookmarks' ? t('savedEntities.title') : t(`library.${item}`)}</button>
       }</For>
     </nav>
     <Show when={collection()}>{item => <div class={styles.collectionHeading}><button type="button" onClick={closeCollection}>{t('common.back')}</button><h2>{item().title}</h2><Show when={props.onCollectionMenu}><button class={styles.menuTrigger} data-collection-menu aria-label={t('songRow.ariaMore')} onClick={event => props.onCollectionMenu?.(collectionTracks(), item().title, event, { kind: item().kind, id: item().id, bookmark: props.disconnected || onlyAvailable() ? undefined : item().bookmark })}>⋯</button></Show></div>}</Show>
     <Show when={detailError()}><p role="alert">{t('common.loadFailed')}</p></Show>
+    <Show when={tab() === 'bookmarks'} fallback={
     <Show when={collection() || tab() === 'songs' || tab() === 'favourites'} fallback={
       <Show when={tab() === 'playlists'} fallback={
         <><Show when={tab() === 'albums'}><div class={styles.libraryTools}><button class={styles.menuTrigger} data-album-menu aria-label={t('library.albumSortTitle')} onClick={event => void albumMenu(event)}>⋯</button></div></Show>
         <Show when={tab() === 'albums' ? albumRows().length : artistRows().length}><NativeSearchToolbar search={search.reveal} /></Show>
-        <Show when={!albums.error && !artists.error} fallback={<p role="alert">{t('common.loadFailed')} <button onClick={() => { void retryAlbums(); void retryArtists(); }}>{t('common.retry')}</button></p>}>
-          <Show when={!albums.loading && !artists.loading} fallback={<SkeletonRows count={8} variant="media" round={tab() === 'artists'} />}>
+        <Show when={tab() === 'albums' ? !albums.error : !artists.error} fallback={<p role="alert">{t('common.loadFailed')} <button onClick={() => { void retryAlbums(); void retryArtists(); }}>{t('common.retry')}</button></p>}>
+          <Show when={tab() === 'albums' ? !albums.loading : !artists.loading} fallback={<SkeletonRows count={8} variant="media" round={tab() === 'artists'} />}>
             <Show when={tab() === 'albums'} fallback={<For each={visibleArtists()} fallback={empty(artistRows(), t('library.emptyArtists'))}>{artist =>
               <MusicListRowView title={artist.name} subtitle={trackCount(artist.track_count)} seed={artist.id}
                 round cover={artist.cover_track_id ? coverUrl(artist.cover_track_id, 'thumb') : undefined}
@@ -169,7 +177,8 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
           </Show>
         </Show></>
       }>
-      <Show when={names().length}><NativeSearchToolbar search={search.reveal} /></Show>
+      <NativeSearchToolbar search={names().length ? search.reveal : undefined}
+        actions={<Show when={props.onCreatePlaylist}><Button variant="primary" size="sm" disabled={props.disconnected} onClick={props.onCreatePlaylist}>{t('playlists.new')}</Button></Show>} />
       <For each={visibleNames()} fallback={empty(names(), t('playlists.empty'))}>{name =>
           <MusicListRowView title={name} subtitle={trackCount(library().playlists?.[name]?.length ?? 0)} seed={name}
             cover={props.disconnected ? undefined : (() => { const id = library().settings?.playlist_covers?.[name] ?? library().playlists?.[name]?.find(id => library().tracks.some(track => collectionId(track) === id && track.source !== 'preview')); return id ? coverUrl(id, 'thumb') : undefined; })()}
@@ -181,7 +190,6 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
         const offline: MenuAction[] = [
         { label: t(onlyAvailable() ? 'android.offlineAll' : 'android.offlineOnly'), disabled: props.disconnected, selected: onlyAvailable() || props.disconnected, onSelect: () => { detailEpoch++; setCollection(null); setOnlyAvailable(value => !value); } },
         { label: t('android.offlineManage'), onSelect: () => props.onManageOffline?.() },
-        ...(tab() === 'playlists' && props.onCreatePlaylist ? [{ label: t('playlistPicker.new'), disabled: props.disconnected, onSelect: () => props.onCreatePlaylist?.() }] : []),
       ];
         // The songs list adds the web's order and filter, grouped as on the web.
         if (!collection() && tab() === 'songs') openContextMenu({ title: t('library.title'), sections: [
@@ -198,7 +206,11 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
           onOpenEntityPath={path => props.onOpenEntityPath?.(path)}
         />
       </Show>
-      <Show when={tracks().length} fallback={empty(sourceTracks(), t(tab() === 'favourites' ? 'favourites.empty' : 'library.emptyLibrary'))}>
+      <For each={artistMatches()}>{artist => <MusicListRowView title={artist.name}
+        cover={!props.disconnected && artist.coverId ? coverUrl(artist.coverId, 'thumb') : undefined}
+        subtitle={trackCount(artist.count)} seed={artist.id} round
+        onActivate={() => void open('artists', artist.id, artist.name)} />}</For>
+      <Show when={tracks().length} fallback={artistMatches().length ? undefined : empty(sourceTracks(), t(tab() === 'favourites' ? 'favourites.empty' : 'library.emptyLibrary'))}>
 <VirtualBrowseRows favourite={props.isFavourite} offline={props.disconnected} onMenu={props.onMenu ? (track, event, index) => {
   const selected = collection();
   const occurrence = selected?.kind === 'playlists' && index !== undefined ? tracks().slice(0, index).filter(row => row.id === track.id).length : -1;
@@ -206,6 +218,11 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
   props.onMenu?.(track, event, selected?.kind === 'playlists' && positions[occurrence] !== undefined ? { playlist: selected.id, index: positions[occurrence] } : undefined);
 } : undefined} tracks={tracks()} activeId={props.activeId} isActive={props.isActive} onPlay={props.onPlay ? index => props.onPlay?.(tracks(), index, collection() ? { kind: collection()!.kind === 'albums' ? 'album' : collection()!.kind === 'artists' ? 'artist' : 'playlist', id: collection()!.id } : undefined) : undefined} />
       </Show>
+    </Show>
+    }>
+      <NativeSearchToolbar search={props.bookmarks?.length ? search.reveal : undefined} />
+      <SavedEntityList entries={props.bookmarks ?? []} expanded match={search.query() ? bookmarkMatches : undefined}
+        loading={props.bookmarksLoading} failed={props.bookmarksFailed} retry={props.retryBookmarks} onOpen={props.onOpenEntityPath} onMenu={props.onEntityMenu} />
     </Show>
   </section>;
 }

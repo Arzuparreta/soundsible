@@ -185,13 +185,20 @@ class PlaybackPlugin : Plugin() {
             val p = controller ?: error("NOT_READY")
             when (call.getString("action")) {
                 "djSelection", "djContext", "djRequest", "djRepair", "djSettings", "dj", "queue", "play", "select", "move", "remove", "append", "insertAfter", "clearManual", "retry", "stop", "skip", "radio", "autoplay", "leveling", "mixing", "metadata", "retireSource" -> {
+                    val queue = call.getString("action") == "queue"
+                    val shuffle = call.getBoolean("shuffle") ?: false
+                    val opening = if (queue) ProgramQueueWindow.split(
+                        call.getArray("tracks") ?: error("NO_TRACKS"), call.getInt("index") ?: 0, shuffle
+                    ) else null
+                    val replacement = if (opening != null) java.util.UUID.randomUUID().toString() else null
                     val args = Bundle().apply {
                         if (call.getString("action") == "metadata") putString("metadataRevision", java.util.UUID.randomUUID().toString())
                         putBoolean("resetRequestGroups", call.getBoolean("resetRequestGroups") ?: false)
                         putBoolean("fromCurrent", call.getBoolean("fromCurrent") ?: true)
                         putString("label", call.getString("label"))
                         putString("sources", call.getArray("sources")?.toString())
-                        putBoolean("shuffle", call.getBoolean("shuffle") ?: false)
+                        putBoolean("shuffle", shuffle)
+                        putString("replacement", replacement)
                         putBoolean("reload", call.getBoolean("reload") ?: false); putBoolean("enabled", call.getBoolean("enabled") ?: false); putString("profile", call.getString("profile"))
                         putInt("seconds", call.getInt("seconds") ?: 0)
                         putLong("generation", connection.generation)
@@ -199,13 +206,18 @@ class PlaybackPlugin : Plugin() {
                         putString("beforeKey", call.getString("beforeKey"))
                         putString("id", call.getString("id"))
                         putString("action", call.getString("action")); putString("queueToken", if (call.getString("action") in listOf("play", "queue")) ProgramQueue.token(p) else call.getString("queueToken")); putString("key", if (call.getString("action") == "play" && p.mediaItemCount > 0) ProgramQueue.key(p, p.currentMediaItemIndex) else call.getString("key"))
-                        putString("tracks", call.getArray("tracks")?.toString())
+                        putString("tracks", opening?.rows ?: call.getArray("tracks")?.toString())
                         call.getDouble("positionMs")?.let { putLong("positionMs", it.toLong().coerceAtLeast(0)) }
                         putString("contextKind", call.getObject("context")?.getString("kind")); putString("contextId", call.getObject("context")?.getString("id"))
-                        putInt("index", if (call.getString("action") == "play") p.currentMediaItemIndex else call.getInt("index") ?: if (call.getString("action") == "queue") 0 else -1); putInt("toIndex", call.getInt("toIndex") ?: -1)
+                        putInt("index", if (call.getString("action") == "play") p.currentMediaItemIndex else opening?.index ?: call.getInt("index") ?: -1); putInt("toIndex", call.getInt("toIndex") ?: -1)
+                    }
+                    if (replacement != null && opening != null && opening.remaining.isNotEmpty()) {
+                        ProgramQueueWindow.staged[replacement] = opening.remaining
+                        main.postDelayed({ ProgramQueueWindow.staged.remove(replacement) }, 5000)
                     }
                     val result = p.sendCustomCommand(ProgramQueue.command, args)
                     result.addListener({
+                        if (replacement != null) ProgramQueueWindow.staged.remove(replacement)
                         try {
                             require(alive && args.getLong("generation") == connection.generation && result.get().resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS)
                             if (args.getString("action") == "stop") awaitClosed(call, p, connection, args.getLong("generation"), android.os.SystemClock.elapsedRealtime() + 3000)
@@ -272,7 +284,7 @@ class PlaybackPlugin : Plugin() {
         val selected = rows.getJSONObject(args.getInt("index"))
         val djSelection = player.sessionExtras.getBoolean("djActive") && player.currentMediaItem?.mediaId == selected.getString("id")
         if (ProgramQueue.token(player) != args.getString("queueToken") && djSelection) { call.resolve(snapshot()); return }
-        if (ProgramQueue.token(player) != args.getString("queueToken") && player.mediaItemCount == rows.length() && player.currentMediaItemIndex == args.getInt("index") && (0 until rows.length()).all { player.getMediaItemAt(it).mediaId == rows.getJSONObject(it).getString("id") }) { call.resolve(snapshot()); return }
+        if (ProgramQueue.programToken(player) == args.getString("replacement")) { call.resolve(snapshot()); return }
         if (android.os.SystemClock.elapsedRealtime() >= deadline) { call.reject("Queue replacement was not observed", "PLAYBACK_COMMAND"); return }
         main.postDelayed({ awaitQueue(call, player, connection, args, deadline) }, 20)
     }

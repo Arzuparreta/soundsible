@@ -8,12 +8,13 @@ const sameNames = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((name, index) => name === b[index]);
 
 /** Real hash links preserve copy/open-in-tab, while ordinary taps use the router. */
-export function MusicLink(props: { path: string; class?: string; label?: string; onMenu?: (event?: MenuEvent) => void; children?: JSX.Element }) {
+export function MusicLink(props: { path: string; class?: string; label?: string; onOpen?: (path: string) => void; onMenu?: (event?: MenuEvent) => void; children?: JSX.Element }) {
   const tap = createResponsiveTap({ onTap: (event) => {
     event.stopPropagation();
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
-    navigateMusic(props.path);
+    if (props.onOpen) props.onOpen(props.path);
+    else navigateMusic(props.path);
   }, onLongPress: props.onMenu ? () => props.onMenu?.() : undefined });
   return <a href={`#${props.path}`} class={`${styles.link} ${props.class ?? ''}`} draggable={false} aria-label={props.label}
     {...tap} onKeyDown={(event) => event.stopPropagation()}

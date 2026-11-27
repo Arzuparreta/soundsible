@@ -62,6 +62,7 @@ export function createNativeDiscoveryFeed(props: {
     finally { if (current()) setLoading(false); }
   }
   const stopPush = onDiscoveryFeedReady((data) => {
+    if (data.reason === 'new_releases') return;
     if (disposed || props.disconnected()) return;
     if (props.paused?.()) {
       staleFromPush = true;

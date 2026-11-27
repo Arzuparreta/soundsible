@@ -1,5 +1,5 @@
 import { collectionId } from '../lib/collectionIdentity';
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import type { Track, PlaylistMap } from '../types/music';
 import type { User } from '../lib/session';
 import { programTrack } from '../lib/program/tracks';
@@ -7,7 +7,10 @@ import { programTrack } from '../lib/program/tracks';
 export interface OfflineItem { track: Track; state: 'queued' | 'downloading' | 'ready' | 'error'; bytes: number; total: number; error: string }
 export interface OfflineState { user: User | null; items: OfflineItem[]; usedBytes: number; limitBytes: number; playlists: PlaylistMap }
 export type OfflineCommand = { action: 'state' } | { action: 'prepare'; tracks: Track[]; playlists: PlaylistMap } | { action: 'remove'; ids: string[] } | { action: 'limit'; bytes: number };
-export const offline = registerPlugin<{ command(command: OfflineCommand & { generation: number }): Promise<OfflineState> }>('SoundsibleOffline');
+export const offline = registerPlugin<{
+  command(command: OfflineCommand & { generation: number }): Promise<OfflineState>;
+  addListener(event: 'offlineChanged', listener: (event: { generation: number }) => void): Promise<PluginListenerHandle>;
+}>('SoundsibleOffline');
 export const acquiredMusic = (tracks: Track[]): Track[] => tracks.filter(track => programTrack(track)?.source === 'local');
 export function availableLibrary(state: OfflineState): { tracks: Track[]; playlists: PlaylistMap } {
   const tracks = state.items.filter(item => item.state === 'ready').map(item => item.track);

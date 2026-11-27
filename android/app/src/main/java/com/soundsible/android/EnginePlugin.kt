@@ -127,10 +127,19 @@ class EnginePlugin : Plugin() {
             listOf(Socket.EVENT_CONNECT, Socket.EVENT_DISCONNECT, Socket.EVENT_CONNECT_ERROR,
                 "library_updated", "saved_entities_updated", "favourites_updated", "downloader_update",
                 "discovery_feed_ready").forEach { event ->
-                next.on(event) {
+                next.on(event) { args ->
                     if (epoch == connection.generation && socket === next) {
                         // Socket.IO calls back on its own thread; listeners live on Capacitor's.
-                        bridge.execute { notifyListeners("engineEvent", JSObject().put("event", event).put("generation", epoch)) }
+                        val message = JSObject().put("event", event).put("generation", epoch)
+                        if (event == "discovery_feed_ready") {
+                            val payload = args.firstOrNull() as? org.json.JSONObject
+                            val data = JSObject()
+                            (payload?.opt("reason") as? String)?.let { data.put("reason", it) }
+                            for (key in listOf("generated_at", "limit")) (payload?.opt(key) as? Number)?.let { data.put(key, it) }
+                            for (key in listOf("browse_error", "error")) (payload?.opt(key) as? Boolean)?.let { data.put(key, it) }
+                            message.put("data", data)
+                        }
+                        bridge.execute { if (epoch == connection.generation && socket === next) notifyListeners("engineEvent", message) }
                     }
                 }
             }

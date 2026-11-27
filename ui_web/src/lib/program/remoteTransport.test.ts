@@ -96,6 +96,13 @@ describe('ProgramCommands as contract commands', () => {
     expect(send({ action: 'mixing', enabled: false })).toEqual([['dj.set_mixing', { on: false }]]);
   });
 
+  it('rejects a radio seed whose target or current occurrence changed', () => {
+    const command = { action: 'radio', enabled: true, profile: 'balanced', key: 'a', ...base } as const;
+    expect(send(command)).toEqual([['radio.start', { track: expect.objectContaining({ id: 't1' }) }]]);
+    expect(() => send({ ...command, key: 'b' })).toThrow(RemoteProgramUnsupported);
+    expect(() => send({ ...command, queueToken: 'remote:other' })).toThrow(RemoteProgramUnsupported);
+  });
+
   it('turns a DJ source list into the sources it adds and removes', () => {
     const dj = projectProgram(held({ live: { phase: 'playing', duration: 200, dj: { phase: 'ready', repairing: false, pending_direction: false, mixing: true, transition: { status: 'idle' } } },
       session: session([entry(t1, 'a')], { mode: 'auto', auto: { profile: 'balanced', sources: [{ id: 's1', label: 'Old', tracks: [t1], activation: 1 }], heard: [], avoidedIdentities: [], plan: {}, staleSeams: [] } }) }), 'speaker', false, ALL, 1);

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, request, setRequestTransport, setUnauthorizedHandler } from '../lib/http';
+import type { DiscoveryFeedReadyEvent } from '../lib/discoveryEvents';
 import { setResourceOrigin } from '../lib/config';
 const native = vi.hoisted(() => ({ request: vi.fn(), cancel: vi.fn(), events: vi.fn(), stopEvents: vi.fn(), addListener: vi.fn() }));
 vi.mock('@capacitor/core', () => ({ registerPlugin: () => native }));
@@ -80,13 +81,14 @@ describe('native account transport', () => {
     } finally { vi.useRealTimers(); }
   });
   it('ignores old generation socket events and removes the listener on disposal', async () => {
-    let deliver!: (event: { event: string; generation: number }) => void;
+    let deliver!: (event: { event: string; generation: number; data?: DiscoveryFeedReadyEvent }) => void;
     const remove = vi.fn().mockResolvedValue(undefined);
     native.addListener.mockImplementation(async (_event, callback) => { deliver = callback; return { remove }; });
     const received = vi.fn();
     const stop = await watchEngine(received);
-    deliver({ event: 'library_updated', generation: 1 });
-    expect(received).toHaveBeenCalledOnce();
+    const data = { reason: 'new_releases', generated_at: 10 };
+    deliver({ event: 'discovery_feed_ready', data, generation: 1 });
+    expect(received).toHaveBeenCalledExactlyOnceWith('discovery_feed_ready', data);
     useEngine({ origin: 'https://another.example', generation: 2 });
     deliver({ event: 'library_updated', generation: 1 });
     expect(received).toHaveBeenCalledOnce();
