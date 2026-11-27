@@ -1393,6 +1393,8 @@ export const fr: Dict = {
       detailError: 'Impossible de charger cette collection.',
       unknownArtist: 'Artistes divers',
       tracksCount: '{count} pistes',
+      loadMoreAlbums: 'Charger plus d’albums',
+      loadingMoreAlbums: 'Chargement des albums…',
     },
     search: {
       placeholder: 'Rechercher titres, albums, artistes',

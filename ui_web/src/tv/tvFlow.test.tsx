@@ -98,9 +98,11 @@ vi.mock('../stores', () => ({
 import { TvFocusProvider } from './nav/spatial';
 import { TvDimOverlay } from './screens/TvDimOverlay';
 import { TvHome } from './screens/TvHome';
+import { TvLibrary } from './screens/TvLibrary';
 import { TvNowPlaying } from './screens/TvNowPlaying';
 import { TvQueueOverlay } from './screens/TvQueueOverlay';
 import { TvSignIn } from './screens/TvSignIn';
+import { setLibraryTab } from './state';
 import type { TvAction } from './nav/input';
 
 afterEach(() => {
@@ -227,5 +229,77 @@ describe('Smart TV screen journeys', () => {
     setDimActive(false);
     await Promise.resolve();
     expect(queryByText(/Listening on Soundsible TV/)).toBeNull();
+  });
+
+  it('prevents default on repeated Enter over focused buttons without blocking text inputs', async () => {
+    mockApi.createTvAuthRequest.mockResolvedValue({
+      code: 'ABCD-2345',
+      redemption_handle: 'handle-1',
+      device_name: 'Living Room TV',
+      expires_at: '2099-01-01 00:00:00',
+      expires_in_sec: 300,
+      poll_interval_ms: 2000,
+      approve_path: '/player/#/tv-approve',
+      approve_url: 'http://station/player/#/tv-approve?code=ABCD-2345',
+    });
+
+    const { getByRole, unmount } = render(() => <TvSignIn />);
+    await waitFor(() => expect(getByRole('button', { name: 'New code' })).toBeInTheDocument());
+
+    const btn = getByRole('button', { name: 'New code' });
+    btn.focus();
+    const repeatEnterBtn = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      repeat: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    btn.dispatchEvent(repeatEnterBtn);
+    expect(repeatEnterBtn.defaultPrevented).toBe(true);
+    expect(mockApi.createTvAuthRequest).toHaveBeenCalledTimes(1);
+
+    const roomInput = getByRole('textbox', { name: 'TV room name' });
+    roomInput.focus();
+    const repeatEnterInput = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      repeat: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    roomInput.dispatchEvent(repeatEnterInput);
+    expect(repeatEnterInput.defaultPrevented).toBe(false);
+    unmount();
+  });
+
+  it('paginates albums beyond the first page via Load more albums in TvLibrary', async () => {
+    const allAlbums = Array.from({ length: 135 }, (_, i) => ({
+      id: `alb-${i + 1}`,
+      title: `Album ${String(i + 1).padStart(3, '0')}`,
+      album_artist: `Artist ${i + 1}`,
+      is_compilation: false,
+      track_count: 8,
+      duration: 1800,
+    }));
+    mockApi.getLibraryAlbums.mockImplementation(async (params?: { offset?: number; limit?: number }) => {
+      const offset = params?.offset ?? 0;
+      const limit = params?.limit ?? allAlbums.length;
+      return allAlbums.slice(offset, offset + limit);
+    });
+    setLibraryTab('albums');
+
+    const { findByRole, queryByRole, findByText, queryByText } = render(() => (
+      <TvFocusProvider>
+        <TvLibrary onNavigate={vi.fn()} />
+      </TvFocusProvider>
+    ));
+
+    expect(await findByText('Album 001')).toBeInTheDocument();
+    expect(queryByText('Album 125')).toBeNull();
+
+    const loadMoreBtn = await findByRole('button', { name: 'Load more albums' });
+    await fireEvent.click(loadMoreBtn);
+
+    expect(await findByText('Album 135')).toBeInTheDocument();
+    expect(queryByRole('button', { name: 'Load more albums' })).toBeNull();
   });
 });

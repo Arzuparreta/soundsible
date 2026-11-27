@@ -1379,6 +1379,8 @@ export const zh: Dict = {
       detailError: '无法加载此合集。',
       unknownArtist: '群星',
       tracksCount: '{count} 首曲目',
+      loadMoreAlbums: '加载更多专辑',
+      loadingMoreAlbums: '正在加载更多专辑…',
     },
     search: {
       placeholder: '搜索歌曲、专辑、艺人',

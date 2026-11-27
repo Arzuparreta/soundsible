@@ -1386,6 +1386,8 @@ export const en = {
       detailError: 'Could not load this collection.',
       unknownArtist: 'Various Artists',
       tracksCount: '{count} tracks',
+      loadMoreAlbums: 'Load more albums',
+      loadingMoreAlbums: 'Loading more albums…',
     },
     search: {
       placeholder: 'Search songs, albums, artists',

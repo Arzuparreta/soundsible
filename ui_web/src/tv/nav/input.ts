@@ -125,3 +125,31 @@ export function normalizeTvKey(
 
   return null;
 }
+
+/**
+ * Return true when an event was suppressed solely due to key repeat on a control
+ * action (such as OK/Enter, Space, Back, or hardware media keys) so callers can
+ * prevent the browser's default button click or navigation without acting twice.
+ */
+export function isSuppressedTvKeyRepeat(
+  event: TvKeyEventLike,
+  target?: Element | null,
+): boolean {
+  if (!event.repeat) return false;
+  if (normalizeTvKey(event, target) !== null) return false;
+  // Copy KeyboardEvent prototype getters explicitly; `{ ...event }` drops non-enumerable keys.
+  return (
+    normalizeTvKey(
+      {
+        key: event.key,
+        code: event.code,
+        keyCode: event.keyCode,
+        altKey: event.altKey,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        repeat: false,
+      },
+      target,
+    ) !== null
+  );
+}

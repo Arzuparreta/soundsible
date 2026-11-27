@@ -267,3 +267,50 @@ def test_tv_auth_rate_limits(tmp_path):
     ]
     assert all(code == 201 for code in statuses[:15])
     assert statuses[15] == 429
+
+
+def test_tv_auth_cleanup_preserves_active_redeemed_sessions(tmp_path):
+    reset_runtime()
+    clear_rate_limits()
+    _make_runtime(tmp_path)
+    app = _bound_app()
+    tv, other_tv, phone = app.test_client(), app.test_client(), app.test_client()
+    db = instance_db()
+    user = _sign_in_cookie(phone, username="diana", role="member")
+
+    req = tv.post("/api/tv-auth/requests", json={"device_name": " Den Smart TV "}).get_json()
+    assert phone.post("/api/tv-auth/approve", json={"code": req["code"]}, headers=_csrf_headers()).status_code == 200
+    assert tv.post("/api/tv-auth/redeem", json={"redemption_handle": req["redemption_handle"]}).status_code == 201
+
+    paired_before = phone.get("/api/paired-devices").get_json()["devices"]
+    assert len(paired_before) == 1
+    token_id = paired_before[0]["token_id"]
+
+    # Backdate the redeemed request's short-lived auth expiry past the 1-day cleanup horizon.
+    # The underlying 90-day session token is still valid, so creating a new TV request
+    # must NOT drop the active redeemed association.
+    with db._get_connection() as conn:
+        conn.execute(
+            "UPDATE tv_auth_requests SET expires_at = datetime('now', '-2 days') WHERE handle_hash = ?",
+            (_hash(req["redemption_handle"]),),
+        )
+
+    other_req = other_tv.post("/api/tv-auth/requests", json={"device_name": "Guest TV"}).get_json()
+    assert other_req["code"]
+
+    paired_after = phone.get("/api/paired-devices").get_json()["devices"]
+    assert [d["token_id"] for d in paired_after] == [token_id]
+
+    # Revoking the active TV session still succeeds (not 404), and a later cleanup sweep
+    # removes the obsolete redeemed row once its token has been revoked.
+    assert phone.post(f"/api/paired-devices/{token_id}/revoke").status_code == 200
+    assert phone.get("/api/paired-devices").get_json()["devices"] == []
+
+    third_req = other_tv.post("/api/tv-auth/requests", json={"device_name": "Second Guest TV"}).get_json()
+    assert third_req["code"]
+    assert token_id not in db.list_tv_auth_session_ids(user["id"])
+    with db._get_connection() as conn:
+        redeemed_left = conn.execute(
+            "SELECT COUNT(*) FROM tv_auth_requests WHERE status = 'redeemed'",
+        ).fetchone()[0]
+    assert redeemed_left == 0

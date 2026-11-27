@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onMount, Show } from 'solid-js';
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Control } from '../../design/Control';
 import { api } from '../../lib/api';
 import { formatDuration, trackCount } from '../../lib/format';
@@ -25,9 +25,14 @@ interface TvLibraryProps {
   onNavigate: (hash: string) => void;
 }
 
+export const TV_LIBRARY_ALBUM_PAGE_SIZE = 120;
+
 export function TvLibrary(props: TvLibraryProps) {
   const focus = useTvFocus();
   const [albums, setAlbums] = createSignal<CatalogAlbum[]>([]);
+  const [hasMoreAlbums, setHasMoreAlbums] = createSignal(false);
+  const [loadingMoreAlbums, setLoadingMoreAlbums] = createSignal(false);
+  const [nextAlbumOffset, setNextAlbumOffset] = createSignal(0);
 
   const trackIndex = createMemo(() => buildTrackIndex(musicLibrary(), state.library));
   const savedPlaylists = createMemo(() =>
@@ -38,10 +43,54 @@ export function TvLibrary(props: TvLibraryProps) {
   );
   const songs = createMemo(() => musicLibrary());
 
+  let disposed = false;
+
+  async function loadAlbumsPage(offset: number, focusFirstAppended = false): Promise<void> {
+    if (loadingMoreAlbums()) return;
+    setLoadingMoreAlbums(true);
+    try {
+      const items = await api.getLibraryAlbums({
+        sort: 'alphabeticalByName',
+        limit: TV_LIBRARY_ALBUM_PAGE_SIZE + 1,
+        offset,
+      });
+      if (disposed) return;
+      const hasMore = items.length > TV_LIBRARY_ALBUM_PAGE_SIZE;
+      const page = hasMore ? items.slice(0, TV_LIBRARY_ALBUM_PAGE_SIZE) : items;
+      let appendedStartIndex = 0;
+      let totalAfter = page.length;
+      if (offset === 0) {
+        setAlbums(page);
+      } else {
+        setAlbums((prev) => {
+          appendedStartIndex = prev.length;
+          const seen = new Set(prev.map((a) => a.id));
+          const merged = [...prev, ...page.filter((a) => !seen.has(a.id))];
+          totalAfter = merged.length;
+          return merged;
+        });
+      }
+      setNextAlbumOffset(offset + page.length);
+      setHasMoreAlbums(hasMore);
+      if (focusFirstAppended && appendedStartIndex < totalAfter) {
+        queueMicrotask(() => {
+          focus.focusById(`lib-album-${appendedStartIndex}`);
+        });
+      }
+    } catch {
+      // Fall back to locally derived albums from musicLibrary when unreachable.
+    } finally {
+      if (!disposed) {
+        setLoadingMoreAlbums(false);
+      }
+    }
+  }
+
   onMount(() => {
-    void api.getLibraryAlbums({ sort: 'alphabeticalByName', limit: 200 })
-      .then((items) => setAlbums(items))
-      .catch(() => {});
+    void loadAlbumsPage(0);
+    onCleanup(() => {
+      disposed = true;
+    });
   });
 
   function selectTab(next: TvLibraryTab): void {
@@ -176,6 +225,27 @@ export function TvLibrary(props: TvLibraryProps) {
               }}
             </For>
           </div>
+          <Show when={hasMoreAlbums()}>
+            <div
+              class={styles.tvRowGroup}
+              data-tv-group-container="lib-albums-more"
+              data-tv-group-kind="row"
+              data-tv-group-order="30"
+            >
+              <Control
+                data-tv-id="lib-albums-load-more"
+                data-tv-group="lib-albums-more"
+                data-tv-index="0"
+                data-tv-focused={focus.activeId() === 'lib-albums-load-more' ? 'true' : undefined}
+                class={styles.tvSecondaryBtn}
+                classList={{ [styles.tvFocusTarget]: true }}
+                disabled={loadingMoreAlbums()}
+                onClick={() => void loadAlbumsPage(nextAlbumOffset(), true)}
+              >
+                {loadingMoreAlbums() ? t('tv.library.loadingMoreAlbums') : t('tv.library.loadMoreAlbums')}
+              </Control>
+            </div>
+          </Show>
         </Show>
       </Show>
 

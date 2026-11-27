@@ -6,7 +6,7 @@ import { logout, user } from '../lib/session';
 import { actions, disposeStore, initStore, state } from '../stores';
 import { TvMiniBar } from './components/TvMiniBar';
 import { TvRail } from './components/TvRail';
-import { isTextInputElement, normalizeTvKey, type TvAction } from './nav/input';
+import { isSuppressedTvKeyRepeat, isTextInputElement, normalizeTvKey, type TvAction } from './nav/input';
 import { createTvRouter } from './nav/router';
 import { TvFocusProvider, useTvFocus } from './nav/spatial';
 import { TvAccount } from './screens/TvAccount';
@@ -164,7 +164,12 @@ function TvShellInner(props: TvAppProps) {
 
     const onKeyDown = (event: KeyboardEvent) => {
       const action = normalizeTvKey(event, document.activeElement);
-      if (!action) return;
+      if (!action) {
+        if (isSuppressedTvKeyRepeat(event, document.activeElement)) {
+          event.preventDefault();
+        }
+        return;
+      }
 
       // 1. Waking from dimmed screen consumes first key press without navigating.
       if (dimActive()) {

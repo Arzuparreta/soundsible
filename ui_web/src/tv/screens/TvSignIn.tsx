@@ -6,7 +6,7 @@ import { detectDeviceName } from '../../lib/deviceIdentity';
 import { t } from '../../lib/i18n';
 import { login, refreshSession } from '../../lib/session';
 import QRCode from '../../lib/vendor/qrcode.esm.js';
-import { normalizeTvKey } from '../nav/input';
+import { isSuppressedTvKeyRepeat, normalizeTvKey } from '../nav/input';
 import { TvFocusProvider, useTvFocus } from '../nav/spatial';
 import styles from '../styles/tv.module.css';
 
@@ -219,7 +219,12 @@ function TvSignInInner(props: TvSignInProps) {
 
     const onKeyDown = (event: KeyboardEvent) => {
       const action = normalizeTvKey(event, document.activeElement);
-      if (!action) return;
+      if (!action) {
+        if (isSuppressedTvKeyRepeat(event, document.activeElement)) {
+          event.preventDefault();
+        }
+        return;
+      }
       if (action === 'up' || action === 'down' || action === 'left' || action === 'right') {
         event.preventDefault();
         focus.move(action);

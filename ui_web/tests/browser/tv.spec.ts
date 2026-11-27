@@ -91,7 +91,15 @@ async function setupTvSession(
   });
 
   await page.route((u) => u.pathname === '/api/library/albums', async (route) => {
-    await route.fulfill({ json: { albums, sort: 'recent' } });
+    const url = new URL(route.request().url());
+    const offsetParam = Number(url.searchParams.get('offset') ?? '0');
+    const limitParam = url.searchParams.get('limit');
+    const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
+    const limit = limitParam !== null ? Number(limitParam) : albums.length;
+    const sliced = Number.isFinite(limit) ? albums.slice(offset, offset + limit) : albums.slice(offset);
+    await route.fulfill({
+      json: { albums: sliced, sort: url.searchParams.get('sort') || 'recent' },
+    });
   });
 
   await page.route((u) => u.pathname.startsWith('/api/library/albums/'), async (route) => {
@@ -312,8 +320,18 @@ test('Home focuses Resume without autoplay, D-pad rail restore, held OK single f
   await page.keyboard.press('Enter');
   await expect(page.getByText(/Playing now/)).toBeVisible();
 
-  // Held Enter (repeat: true) on a card/toggle activates 0 additional times (stays on Home rather than opening Now Playing).
-  await resumeBtn.dispatchEvent('keydown', { key: 'Enter', repeat: true, bubbles: true });
+  // Held Enter (repeat: true) must be defaultPrevented so native button click does not activate again.
+  const repeatPrevented = await resumeBtn.evaluate((el) => {
+    const ev = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      repeat: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    el.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  });
+  expect(repeatPrevented).toBe(true);
   await expect(resumeBtn).toBeFocused();
   const searchBtn = page.locator('[data-tv-id="home-recent-0"]');
   await page.mouse.move(10, 10);
@@ -449,4 +467,33 @@ test('TV remote capability declaration, single command handling across reconnect
   tv.setSignedIn(false);
   tv.disconnectSocket();
   await expect(page.getByRole('heading', { name: 'Sign in on your TV' })).toBeVisible({ timeout: 8000 });
+});
+
+test('TV Library Albums paginates beyond the first page cleanly via Load more albums', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes('mobile'), 'Smart TV runs on living-room viewports');
+
+  const manyAlbumTracks: TrackSeed[] = Array.from({ length: 130 }, (_, i) => ({
+    id: `trk-many-${i + 1}`,
+    title: `Song ${i + 1}`,
+    artist: `Artist ${i + 1}`,
+    album: `Album ${String(i + 1).padStart(3, '0')}`,
+    album_id: `alb-many-${i + 1}`,
+    duration: 180,
+  }));
+
+  await setupTvSession(page, { tracks: manyAlbumTracks });
+  await page.goto('/tv/#/library');
+  await page.locator('[data-tv-id="lib-tab-albums"]').click();
+
+  await expect(page.locator('[data-tv-id="lib-album-0"]')).toBeVisible();
+  await expect(page.locator('[data-tv-id="lib-album-119"]')).toBeVisible();
+  await expect(page.locator('[data-tv-id="lib-album-120"]')).toHaveCount(0);
+
+  const loadMore = page.locator('[data-tv-id="lib-albums-load-more"]');
+  await expect(loadMore).toBeVisible();
+  await loadMore.click();
+
+  await expect(page.locator('[data-tv-id="lib-album-129"]')).toBeVisible();
+  await expect(page.locator('[data-tv-id="lib-album-120"]')).toBeFocused();
+  await expect(loadMore).toHaveCount(0);
 });

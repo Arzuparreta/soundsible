@@ -1387,6 +1387,8 @@ export const es: Dict = {
       detailError: 'No se pudo cargar esta colección.',
       unknownArtist: 'Varios artistas',
       tracksCount: '{count} pistas',
+      loadMoreAlbums: 'Cargar más álbumes',
+      loadingMoreAlbums: 'Cargando más álbumes…',
     },
     search: {
       placeholder: 'Buscar canciones, álbumes, artistas',

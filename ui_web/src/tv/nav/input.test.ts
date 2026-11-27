@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTextInputElement, normalizeTvKey } from './input';
+import { isSuppressedTvKeyRepeat, isTextInputElement, normalizeTvKey } from './input';
 
 describe('TV input normalization', () => {
   it('maps arrow keys to directions and allows repeats for scrolling', () => {
@@ -46,5 +46,28 @@ describe('TV input normalization', () => {
     expect(normalizeTvKey({ key: 'MediaTrackNext' })).toBe('media_next');
     expect(normalizeTvKey({ key: 'MediaTrackPrevious' })).toBe('media_prev');
     expect(normalizeTvKey({ key: 'MediaStop' })).toBe('media_stop');
+  });
+
+  it('identifies repeated control/media keys that must be prevented to avoid native activation', () => {
+    const button = document.createElement('button');
+    const input = document.createElement('input');
+
+    expect(isSuppressedTvKeyRepeat({ key: 'Enter', repeat: false }, button)).toBe(false);
+    expect(isSuppressedTvKeyRepeat({ key: 'Enter', repeat: true }, button)).toBe(true);
+    expect(isSuppressedTvKeyRepeat({ key: 'Select', repeat: true }, button)).toBe(true);
+    expect(isSuppressedTvKeyRepeat({ key: ' ', code: 'Space', repeat: true }, button)).toBe(true);
+    expect(isSuppressedTvKeyRepeat({ key: 'Escape', repeat: true }, button)).toBe(true);
+    expect(isSuppressedTvKeyRepeat({ key: 'Backspace', repeat: true }, button)).toBe(true);
+    expect(isSuppressedTvKeyRepeat({ key: 'MediaPlayPause', repeat: true }, button)).toBe(true);
+
+    // Repeating navigation keys stay unhandled by repeat suppression so lists scroll smoothly.
+    expect(isSuppressedTvKeyRepeat({ key: 'ArrowDown', repeat: true }, button)).toBe(false);
+    // Real DOM KeyboardEvent instances expose getters on prototype rather than own enumerable keys.
+    expect(
+      isSuppressedTvKeyRepeat(new KeyboardEvent('keydown', { key: 'Enter', repeat: true }), button),
+    ).toBe(true);
+    // Text inputs retain their own Enter/Backspace handling.
+    expect(isSuppressedTvKeyRepeat({ key: 'Enter', repeat: true }, input)).toBe(false);
+    expect(isSuppressedTvKeyRepeat({ key: 'Backspace', repeat: true }, input)).toBe(false);
   });
 });

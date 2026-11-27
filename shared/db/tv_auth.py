@@ -35,12 +35,30 @@ class TvAuthStore:
     ) -> Dict[str, Any]:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
-            # Sweep requests that expired more than a day ago so abandoned flows
-            # cannot accumulate indefinitely.
+            # Sweep stale unredeemed requests after 1 day, and remove redeemed
+            # rows only once their minted session token is missing, revoked, or expired
+            # so active TV sessions remain manageable in /api/paired-devices.
             conn.execute(
                 """
                 DELETE FROM tv_auth_requests
-                WHERE expires_at <= datetime('now', '-1 day')
+                WHERE (
+                    status != 'redeemed'
+                    AND expires_at <= datetime('now', '-1 day')
+                )
+                OR (
+                    status = 'redeemed'
+                    AND expires_at <= datetime('now', '-1 day')
+                    AND (
+                        auth_token_id IS NULL
+                        OR NOT EXISTS (
+                            SELECT 1
+                            FROM auth_tokens t
+                            WHERE t.id = tv_auth_requests.auth_token_id
+                              AND t.revoked_at IS NULL
+                              AND (t.expires_at IS NULL OR t.expires_at > CURRENT_TIMESTAMP)
+                        )
+                    )
+                )
                 """
             )
             conn.execute(
