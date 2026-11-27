@@ -16,6 +16,7 @@ import { BackIcon, MoreIcon, PinIcon, PlayIcon, RadioIcon, menuIcons } from '../
 import { Control, IconButton } from '../design/Control';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { CoverImage } from '../components/CoverImage';
+import { SkeletonRows } from '../design/Skeleton';
 import { CollectionDownloadView } from '../components/CollectionDownloadView';
 import { createNativeCollection } from './collection';
 import { sameEntity, type SavedEntity } from '../lib/savedEntityIdentity';
@@ -246,7 +247,7 @@ export default function NativeEntityProfile(props: {
     <Show when={collection.error() || bookmarkError()}><p role="alert">{collection.error() || t('savedEntities.failed')} <Show when={collection.error()}><button onClick={() => void collection.retry()}>{t('common.retry')}</button></Show></p></Show>
     <Show when={failed()}><p role="alert">{t('common.loadFailed')} <button onClick={() => { if (view() === 'library') setLibraryRetry(value => value + 1); else profile.retry(); }}>{t('common.retry')}</button></p></Show>
     <Show when={profile.profile()?.partial_failures?.length}><p role="status">{t('musicExplorer.partial')}</p></Show>
-    <Show when={loading()}><p role="status">{t('common.loading')}</p></Show>
+    <Show when={loading()}><SkeletonRows count={6} variant="media" /></Show>
     <Show when={view() === 'discover' && artist()} fallback={<>
       <Show when={songs().length} fallback={
         <Show when={!loading() && !failed()}><EmptyState>{t('artist.empty')}</EmptyState></Show>

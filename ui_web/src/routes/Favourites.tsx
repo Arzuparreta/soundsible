@@ -1,11 +1,12 @@
 import { CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
-import { createMemo } from 'solid-js';
+import { createMemo, Show } from 'solid-js';
 import { A } from '@solidjs/router';
 import { favouriteRows, state } from '../stores';
 import { player } from '../stores/player';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
+import { SkeletonToolbar } from '../design/Skeleton';
 import { trackCount } from '../lib/format';
 import { isPodcastTrack } from '../lib/track';
 import { savedIsPlayable } from '../lib/saved';
@@ -78,6 +79,9 @@ export default function Favourites() {
           <CollectionActions title={t('favourites.title')} tracks={favTracks()} />
         ) : undefined}
       />
+      <Show when={state.loading && !rows().length && !player().autoMode.active}>
+        <SkeletonToolbar meta />
+      </Show>
       <TrackList
         tracks={visibleTracks()}
         context={context()}

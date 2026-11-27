@@ -22,7 +22,7 @@ import type { ActionMenuOptions } from '../components/ActionMenu';
 import { followPodcast, podcastPath } from '../lib/podcasts';
 import { menuIcons } from '../components/icons';
 import { toast } from '../lib/toast';
-import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
+import { SkeletonCards, SkeletonHeading, SkeletonRegion, SkeletonRows } from '../design/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { createSearchReveal } from '../components/SearchReveal';
@@ -256,12 +256,17 @@ export default function Podcasts() {
                 <EmptyState compact>{t('podcasts.noCategoryResults')}</EmptyState>
               </Show>
               <Show when={!genre() && state.podcastSubscriptions.length === 0 && recommendedPodcasts().length === 0 && topEpisodes().length === 0 && !chartFailed() && !episodesFailed()}>
-                <Show when={state.loading || revalidating()} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}><SkeletonCards /></Show>
+                <Show when={state.loading || revalidating()} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}>
+                  <SkeletonRegion>
+                    <SkeletonHeading class={styles.sectionTitle} />
+                    <SkeletonCards class={styles.grid} count={12} lines={2} decorative />
+                  </SkeletonRegion>
+                </Show>
               </Show>
             </>
           }
         >
-          <Show when={search.pending() && !search.results().length}><SkeletonRows count={6} compact /></Show>
+          <Show when={search.pending() && !search.results().length}><SkeletonRows count={8} variant="media" /></Show>
           <Show when={search.error()}>
             <EmptyState compact tone="danger">
               {t('search.catalogErrorHint')}{' '}

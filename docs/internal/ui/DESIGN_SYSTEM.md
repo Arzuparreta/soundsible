@@ -16,6 +16,12 @@ Existing imports from `components/Button`, `components/CoverImage` and
 - Row height, artwork and controls follow `--row-h`, `--cover-sm` and
   `--control-h`. Panel fields follow the same density recipe. Loaded browse
   grids and skeleton grids use `--browse-grid-columns` and the browse gap tokens.
+- While a route module loads, the shell shows its title and a loading status.
+  Once mounted, the route owns its data placeholders. Give each placeholder
+  the layout class of its loaded row, toolbar or search split. Keep only
+  decorative bones in skeleton CSS. Song and episode placeholders use the
+  same mobile layout signal as their loaded rows. Compose skeleton sections
+  under one loading status and hide decorative items from assistive technology.
 - `SearchField` supplies the density-aware input for every search. Use
   `PageToolbar` (via `ViewHeader` for route roots) for list and page placement.
   The field comes first and grows into the space left by metadata and controls.

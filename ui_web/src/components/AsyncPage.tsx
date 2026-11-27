@@ -3,14 +3,12 @@ import { createSignal, ErrorBoundary, onCleanup, onMount, Show, type Component }
 import { Dynamic } from 'solid-js/web';
 import { t } from '../lib/i18n';
 import { ViewHeader } from './ViewHeader';
-import { SkeletonCards, SkeletonRows } from './Skeleton';
 import { EmptyState } from './EmptyState';
 
 /** Route modules load independently of router transitions. The destination and
  * its header commit immediately; a slow chunk never keeps the old page alive.
  * Cache code, not mounted pages or account data. Failed imports remain retryable. */
-export function asyncPage(load: () => Promise<{ default: Component }>, title: () => string,
-  shape: 'rows' | 'cards' = 'rows'): Component {
+export function asyncPage(load: () => Promise<{ default: Component }>, title: () => string): Component {
   let cached: Component | undefined;
   let flight: Promise<Component> | undefined;
   const resolve = () => flight ??= load().then(module => cached = module.default)
@@ -33,9 +31,7 @@ export function asyncPage(load: () => Promise<{ default: Component }>, title: ()
         <Show when={!failed()} fallback={<EmptyState tone="danger">
           {t('common.loadFailed')} <Button variant="secondary" onClick={retry}>{t('common.retry')}</Button>
         </EmptyState>}>
-          <div class="page-loading" aria-busy="true">
-            <Show when={shape === 'cards'} fallback={<SkeletonRows />}><SkeletonCards /></Show>
-          </div>
+          <div class="route-loading" role="status">{t('common.loading')}</div>
         </Show>
       </div>
     }>{component => <ErrorBoundary fallback={(_error, reset) => <div class="view">

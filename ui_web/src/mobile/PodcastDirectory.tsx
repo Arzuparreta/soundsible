@@ -7,6 +7,7 @@ import { NativeSearchToolbar } from '../components/NativeSearchToolbar';
 import Button from '../components/Button';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../design/Skeleton';
 import type { PodcastSearchResult, PodcastShowInfo, PodcastSubscription } from '../types/podcast';
 import { podcastRecommendations, type RawPodcastRow } from '../lib/podcastRecommendations';
 import { openContextMenu } from '../lib/contextMenu';
@@ -71,7 +72,7 @@ export default function PodcastDirectory(props: { generation: number; disconnect
     <Show when={countryError()}><p role="alert">{t('common.loadFailed')} <button disabled={props.disconnected} onClick={() => setCountryRetry(n => n + 1)}>{t('common.retry')}</button></p></Show>
     <Show when={!search.active()}>{props.children}</Show>
     <PodcastCharts country={country} generation={props.generation} activeId={props.activeId} disconnected={props.disconnected} hidden={search.active()} onOpen={row => props.onOpen(podcastShowInfo(row))} onPlay={(episode, row) => props.onPlay?.(episode, row) ?? Promise.reject(new Error('Playback unavailable'))} />
-    <Show when={search.pending()}><p role="status">{t('common.loading')}</p></Show>
+    <Show when={search.pending()}><SkeletonRows count={6} variant="media" /></Show>
     <Show when={search.error()}>
       <EmptyState compact tone="danger">{t('search.catalogErrorHint')} <Button variant="secondary" onClick={search.retry}>{t('common.retry')}</Button></EmptyState>
     </Show>

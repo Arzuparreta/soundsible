@@ -5,7 +5,7 @@ import { MusicLink } from './MusicLinks';
 import { CoverImage } from './CoverImage';
 import { openSavedEntityMenu } from './savedEntityActions';
 import { coverGradient } from '../lib/cover';
-import { SkeletonCards } from './Skeleton';
+import { SkeletonCards, SkeletonHeading, SkeletonRegion } from '../design/Skeleton';
 import { MoreIcon, PinIcon } from './icons';
 import Button from './Button';
 import styles from './SavedEntities.module.css';
@@ -26,7 +26,18 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
         <Button variant="secondary" size="sm" disabled={entitiesLoading()} onClick={() => void syncSavedEntities()}>{t('common.retry')}</Button>
       </p>
     </Show>
-    <Show when={props.expanded && entitiesLoading() && !savedEntities().length}><SkeletonCards count={3} /></Show>
+    <Show when={unifiedExpanded() && entitiesLoading() && !savedEntities().length}>
+      <SkeletonRegion>
+        <div class={styles.section}>
+          <div class={styles.header}><SkeletonHeading size="h2" /></div>
+          <SkeletonCards count={6} shape="round" lines={1} class={`${styles.rail} ${styles.expanded}`} decorative />
+        </div>
+        <div class={styles.section}>
+          <div class={styles.header}><SkeletonHeading size="h2" /></div>
+          <SkeletonCards count={6} lines={2} class={`${styles.rail} ${styles.expanded}`} decorative />
+        </div>
+      </SkeletonRegion>
+    </Show>
     <Show when={unifiedExpanded() && !entries().length && !entitiesLoading() && !entitiesError()}>
       <p class={styles.empty}>{t(savedEntities().length > 0 ? 'library.noCollectionMatches' : 'savedEntities.empty')}</p>
     </Show>
@@ -40,7 +51,11 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
               <MusicLink class={styles.more} path={`/bookmarks/${kind === 'album' ? 'albums' : 'artists'}`} label={`${t('searchHome.seeAll')}: ${heading(kind)}`}>{t('searchHome.seeAll')}</MusicLink>
             </Show>
           </div>
-          <Show when={matches().length} fallback={<Show when={!entitiesLoading() && !entitiesError()}>
+          <Show when={matches().length} fallback={<Show when={!entitiesLoading() && !entitiesError()} fallback={
+            <Show when={props.expanded && entitiesLoading() && !savedEntities().length}>
+              <SkeletonCards count={12} shape={kind === 'artist' ? 'round' : 'square'} lines={kind === 'album' ? 2 : 1} class={`${styles.rail} ${styles.expanded}`} />
+            </Show>
+          }>
             <p class={styles.empty}>{t(source(kind).length > 0 ? 'library.noCollectionMatches' : 'savedEntities.empty')}</p>
           </Show>}>
             <div class={styles.rail} data-horizontal-scroll={props.expanded ? undefined : ''} classList={{ [styles.expanded]: props.expanded || !!props.match }}>

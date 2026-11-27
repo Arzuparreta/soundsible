@@ -1,10 +1,11 @@
-import { createEffect, createMemo, on } from 'solid-js';
+import { createEffect, createMemo, on, Show } from 'solid-js';
 import { ViewHeader } from '../components/ViewHeader';
 import { createCollectionSearch } from '../components/CollectionSearch';
 import SavedEntities from '../components/SavedEntities';
 import { MusicLink } from '../components/MusicLinks';
+import { SkeletonToolbar } from '../design/Skeleton';
 import { matchesSavedEntity } from '../lib/librarySearch';
-import { savedEntities, type SavedEntity } from '../lib/savedEntities';
+import { entitiesLoading, savedEntities, type SavedEntity } from '../lib/savedEntities';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
 import { t } from '../lib/i18n';
@@ -29,6 +30,9 @@ export default function Bookmarks(props: { kind?: SavedEntity['kind'] }) {
         search={canSearch() ? search.reveal : undefined}
         onTitleTap={() => reselectPrimaryTab('/bookmarks')}
       />
+      <Show when={entitiesLoading() && !savedEntities().length}>
+        <SkeletonToolbar />
+      </Show>
       <div class={styles.body} ref={element => registerPrimaryScroll(element)} data-primary-scroll>
         <MusicLink class={styles.back} path="/">← {t('savedEntities.back')}</MusicLink>
         <SavedEntities kind={props.kind} expanded match={match()} />

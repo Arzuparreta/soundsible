@@ -1,0 +1,25 @@
+.bone {
+  display: block;
+  overflow: hidden;
+  background: var(--skeleton-on-raised);
+  border-radius: var(--radius-full);
+}
+
+.copy { flex: 1; }
+
+.title {
+  width: min(74%, 220px);
+  height: calc(var(--text-h2) * 0.8);
+}
+
+.sub {
+  width: min(48%, 140px);
+  height: calc(var(--text-label) * 0.72);
+}
+
+@media (forced-colors: active) {
+  .bone {
+    background: Canvas;
+    border: 1px solid GrayText;
+  }
+}

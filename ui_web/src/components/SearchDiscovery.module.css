@@ -2,6 +2,7 @@
    come from the browse tokens (tokens.css); the fallbacks only matter where a
    host has not loaded them. */
 .home { display: flex; flex-direction: column; gap: var(--space-2xl); min-width: 0; padding: var(--space-sm) 0 var(--space-xl); }
+.loadingStack { display: flex; flex-direction: column; gap: var(--space-2xl); min-width: 0; }
 .section { position: relative; display: flex; flex-direction: column; gap: var(--space-md); min-width: 0; }
 
 .heading { display: flex; align-items: center; gap: var(--space-md); min-height: var(--pill-h); }

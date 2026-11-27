@@ -63,7 +63,7 @@ export default function Playlists() {
         <Show when={!editing()} fallback={
           <MusicReorderList items={names()} label={(name) => name} render={(name) => <span>{name}</span>} onChange={actions.reorderPlaylists} />
         }>
-        <Show when={names().length > 0} fallback={<Show when={state.loading} fallback={<EmptyState>{t('playlists.empty')}</EmptyState>}><SkeletonCards /></Show>}>
+        <Show when={names().length > 0} fallback={<Show when={state.loading} fallback={<EmptyState>{t('playlists.empty')}</EmptyState>}><SkeletonCards class={styles.grid} count={12} lines={2} /></Show>}>
           <Show when={filteredNames().length} fallback={<NoCollectionMatches />}>
           <div class={styles.grid}>
             <For each={filteredNames()}>

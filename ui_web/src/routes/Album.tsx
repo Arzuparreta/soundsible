@@ -27,7 +27,7 @@ import { startDjFromCatalog, startDjFromTracks } from '../lib/djStart';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Album.module.css';
 import hero from '../components/EntityHero.module.css';
-import { SkeletonRows } from '../components/Skeleton';
+import { SkeletonRegion, SkeletonRows, SkeletonToolbar } from '../design/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { CatalogResultRow } from '../components/CatalogResultRow';
 import { ReleaseShelf } from '../components/ArtistDiscoveryView';
@@ -349,7 +349,7 @@ export default function Album() {
                 <Show when={!membershipFailed()} fallback={
                   <EmptyState tone="danger">{t('common.loadFailed')} <Button class={hero.retry} variant="secondary" size="sm" onClick={() => void retryMembership()}>{t('common.retry')}</Button></EmptyState>
                 }>
-                  <Show when={!membership.loading && !state.loading} fallback={<SkeletonRows />}><LibraryView search={search} tracks={libraryTrackList()} context={albumContext('library')} /></Show>
+                  <Show when={!membership.loading && !state.loading} fallback={<SkeletonRegion><SkeletonToolbar /><SkeletonRows count={8} indexed decorative /></SkeletonRegion>}><LibraryView search={search} tracks={libraryTrackList()} context={albumContext('library')} /></Show>
                 </Show>
               }>
                 <DiscoverView
@@ -366,7 +366,10 @@ export default function Album() {
             </Show>
           }
         >
-          <SkeletonRows count={8} />
+          <SkeletonRegion>
+            <SkeletonToolbar />
+            <SkeletonRows count={8} indexed decorative />
+          </SkeletonRegion>
         </Show>
       </div>
     </div>

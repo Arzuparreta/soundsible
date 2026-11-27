@@ -280,5 +280,5 @@ main:has(> [data-page-indicator]) [data-primary-scroll]::after {
   opacity: 1;
 }
 
-/* Route modules and initial data share a bounded, scrollable loading surface. */
-.page-loading { min-height: 0; overflow: auto; padding: var(--space-md) var(--gutter); }
+.page-loading { flex: 1; min-height: 0; overflow-y: auto; }
+.route-loading { padding: var(--space-md) var(--gutter); color: var(--ink-secondary); }

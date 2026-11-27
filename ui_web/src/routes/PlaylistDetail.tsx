@@ -19,6 +19,7 @@ import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import hero from '../components/EntityHero.module.css';
 import { EmptyState } from '../components/EmptyState';
+import { SkeletonToolbar } from '../design/Skeleton';
 import { MusicReorderList } from '../components/MusicReorderList';
 import { Control } from '../design/Control';
 import { navigateBackOr } from '../lib/scrollHistory';
@@ -93,7 +94,7 @@ export default function PlaylistDetail() {
               </button>
           </div>
       </EntityHero>
-      <Show when={canSearch()}><CollectionToolbar search={search} meta={trackCount(trackIds().length)} /></Show>
+      <Show when={canSearch()} fallback={<Show when={!editing() && state.loading && !tracks().length}><SkeletonToolbar meta /></Show>}><CollectionToolbar search={search} meta={trackCount(trackIds().length)} /></Show>
       <Show when={editing()} fallback={<TrackList
         tracks={filteredTracks()}
         context={context()}

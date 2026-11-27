@@ -31,7 +31,7 @@ import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
 import hero from '../components/EntityHero.module.css';
 import { coverGradient } from '../lib/cover';
-import { SkeletonRows } from '../components/Skeleton';
+import { SkeletonCards, SkeletonHeading, SkeletonRegion, SkeletonRows, SkeletonToolbar } from '../design/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { CatalogResultRow } from '../components/CatalogResultRow';
 import { ArtistDiscoveryView, fansLabel } from '../components/ArtistDiscoveryView';
@@ -406,7 +406,20 @@ export default function Artist() {
             </Show>
           }
         >
-          <SkeletonRows count={6} />
+          <SkeletonRegion>
+            <div class={`${styles.section} ${styles.topSection}`}>
+              <SkeletonToolbar contained />
+              <div class={styles.trackList}>
+                <SkeletonRows count={5} indexed decorative />
+              </div>
+            </div>
+            <div class={styles.section}>
+              <div class={styles.sectionHead}>
+                <SkeletonHeading size="h3" />
+              </div>
+              <SkeletonCards class={styles.albumRail} cardClass={styles.albumCard} layout="rail" lines={2} decorative />
+            </div>
+          </SkeletonRegion>
         </Show>
       </div>
     </div>
@@ -419,7 +432,7 @@ function LibraryView(props: { search: CollectionSearchState; tracks: Track[]; lo
       <Show when={!props.failed} fallback={
         <EmptyState tone="danger">{t('common.loadFailed')} <Button class={hero.retry} variant="secondary" size="sm" onClick={() => props.onRetry()}>{t('common.retry')}</Button></EmptyState>
       }>
-        <Show when={props.tracks.length > 0} fallback={<Show when={props.loading} fallback={<EmptyState>{t('artist.empty')}</EmptyState>}><SkeletonRows /></Show>}>
+        <Show when={props.tracks.length > 0} fallback={<Show when={props.loading} fallback={<EmptyState>{t('artist.empty')}</EmptyState>}><SkeletonRegion><SkeletonToolbar /><SkeletonRows count={8} indexed decorative /></SkeletonRegion></Show>}>
           <EntityTrackList search={props.search} tracks={props.tracks} context={props.context} />
         </Show>
       </Show>
