@@ -17,6 +17,7 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: string;
   body?: unknown;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
   timeoutMs?: number;
   keepalive?: boolean;
@@ -59,7 +60,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     if (external.aborted) controller.abort();
     else external.addEventListener('abort', abortFromCaller, { once: true });
   }
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...(opts.headers ?? {}) };
   const work = opts.work ?? (path.startsWith('/api/discovery/music/dj-') ? djWork : undefined);
   if (work) headers['X-Soundsible-Work'] = JSON.stringify(work);
   if (path.startsWith('/api/discovery/music/dj-')) {

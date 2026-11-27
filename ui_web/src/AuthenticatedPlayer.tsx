@@ -36,6 +36,7 @@ const Downloads = asyncPage(() => import('./routes/Downloads'), () => t('downloa
 const Migrate = asyncPage(() => import('./routes/Migrate'), () => t('migrate.title'));
 const Artist = asyncPage(() => import('./routes/Artist'), () => t('library.artists'));
 const Album = asyncPage(() => import('./routes/Album'), () => t('library.albums'));
+const TvApprove = asyncPage(() => import('./routes/TvApprove'), () => t('tvApprove.title'));
 const Live = asyncPage(() => import('./routes/Live'), () => t('live.title'));
 const DesignPreview = asyncPage(() => import('./pages/DesignPreview'), () => t('common.loading'));
 const Placeholder = asyncPage(() =>
@@ -96,6 +97,7 @@ function Player() {
       <Route path="/import" component={Migrate} />
       <Route path="/artist/:name" component={Artist} />
       <Route path="/album/:name" component={Album} />
+      <Route path="/tv-approve" component={TvApprove} />
       <Route path="/preview" component={DesignPreview} />
       <Route path="*" component={Placeholder} />
     </HashRouter>

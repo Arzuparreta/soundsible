@@ -25,6 +25,12 @@ export function themeBootScript(): string {
     .replace('__THEME_COLORS__', JSON.stringify(THEME_COLORS));
 }
 
+/** Populate window.soundsibleBootColors for secondary surfaces such as /tv/ without loading player boot splash. */
+export function tvColorBootScript(): string {
+  const colorModule = read('./customColors.js');
+  return `(function () {\n${colorModule.replace(/^export /gm, '')}\n  ${colorRuntime} = { ${colorExports(colorModule)} };\n})();`;
+}
+
 /** Inline the tiny launch surface in both dev and production. It must not need
  * another request, the Solid runtime, or a locale chunk to paint. Keep these
  * inputs under src/ so ensure_ui_dist also detects edits to the boot screen. */
@@ -39,6 +45,11 @@ export function startupScreen(): Plugin {
     transformIndexHtml: {
       order: 'post',
       handler(html) {
+        if (!html.includes('<!-- soundsible:boot-screen -->')) {
+          return html.includes('<!-- soundsible:tv-boot-colors -->')
+            ? html.replace('<!-- soundsible:tv-boot-colors -->', `<script>${tvColorBootScript()}</script>`)
+            : html;
+        }
         let styles = 0;
         // Vite emits these links after transforming the entry module. Fetch at
         // normal priority, but only apply on load: ordinary stylesheet links

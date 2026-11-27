@@ -174,3 +174,10 @@
     font-size: var(--text-tiny);
   }
 }
+
+.tvHint {
+  margin: var(--space-xs) 0 0;
+  color: var(--ink-tertiary);
+  font-size: var(--text-caption);
+  line-height: 1.4;
+}

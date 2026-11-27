@@ -33,7 +33,7 @@ ACTIVE_DEVICE_CONSIDERED_RECENT_SEC = 60
 STATE_TTL_SEC = 24 * 3600  # Note: 24H optional; state older can be ignored on GET
 
 ALLOWED_DEVICE_TYPES = frozenset({"web", "desktop", "android", "ios", "agent", "car", "mobile"})
-ALLOWED_FORM_FACTORS = frozenset({"phone", "tablet", "computer"})
+ALLOWED_FORM_FACTORS = frozenset({"phone", "tablet", "computer", "tv"})
 
 _lock = threading.Lock()
 _active_devices: dict[str, dict[str, dict[str, Any]]] = {}  # Scope -> device_id -> state

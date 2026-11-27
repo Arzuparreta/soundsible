@@ -211,6 +211,7 @@ export function openConnectSheet(control: RemoteControl, self: ConnectSelf): voi
               </For>
             </Show>
           </div>
+          <p class={styles.tvHint}>{t('settings.tvConnectHint')}</p>
         </div>
       );
     },

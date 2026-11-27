@@ -86,6 +86,7 @@ CORS(
         "Content-Type",
         "X-Soundsible-Admin-Token",
         "X-Soundsible-Agent-Token",
+        "X-Soundsible-CSRF",
         "X-Soundsible-Work",
         "X-Soundsible-Work-Request",
         "Range",
@@ -189,6 +190,10 @@ PUBLIC_API_PATHS = frozenset({
     "/api/auth/logout",
     "/api/health",
     "/api/pairing/sessions/claim",
+    "/api/tv-auth/requests",
+    "/api/tv-auth/status",
+    "/api/tv-auth/redeem",
+    "/api/tv-auth/cancel",
 })
 
 # Redeeming an invitation happens before you have an account, so these two
@@ -545,6 +550,36 @@ def serve_web_player_desktop_redirect():
 def serve_web_player_desktop():
     return make_response(_render_web_ui_html('index.html', inject_owner_token=True))
 
+
+def _tv_unavailable_response():
+    html = (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<title>Soundsible TV Unavailable</title></head>'
+        '<body style="background:#0c0c0e;color:#f2f2f5;font-family:system-ui,sans-serif;padding:48px;">'
+        '<h1>Soundsible TV is unavailable</h1>'
+        '<p>The installed UI bundle does not include the Smart TV entry. '
+        'Rebuild or update Soundsible, or open the '
+        '<a href="/player/" style="color:#f97a12">web player</a>.</p>'
+        '</body></html>'
+    )
+    resp = Response(html, status=503, mimetype='text/html')
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
+@app.route('/tv')
+def serve_web_tv_redirect():
+    return redirect('/tv/', code=308)
+
+
+@app.route('/tv/')
+def serve_web_tv():
+    ensure_ui_dist(external_dist=get_runtime_config().ui_dist)
+    root = _web_ui_root()
+    if not os.path.isfile(os.path.join(root, 'tv.html')):
+        return _tv_unavailable_response()
+    return make_response(_render_web_ui_html('tv.html'))
+
 @app.route('/favicon.ico')
 def serve_favicon():
     # Browsers request /favicon.ico at the root regardless of <link> tags.
@@ -675,6 +710,7 @@ from shared.api.routes.catalog import catalog_bp
 from shared.api.routes.podcasts import podcasts_bp
 from shared.api.routes.agent import agent_bp
 from shared.api.routes.pairing import pairing_bp
+from shared.api.routes.tv_auth import tv_auth_bp
 from shared.api.routes.setup import setup_bp
 from shared.api.routes.migration import migration_bp
 from shared.api.routes.car import car_bp
@@ -693,6 +729,7 @@ app.register_blueprint(catalog_bp)
 app.register_blueprint(podcasts_bp)
 app.register_blueprint(agent_bp)
 app.register_blueprint(pairing_bp)
+app.register_blueprint(tv_auth_bp)
 app.register_blueprint(setup_bp)
 app.register_blueprint(migration_bp)
 app.register_blueprint(car_bp)

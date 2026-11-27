@@ -176,3 +176,10 @@ it('reopens bootstrap assets offline across encoding and Origin variants', async
   expect(await response!.text()).toBe('asset');
   expect(w.fetch).toHaveBeenCalledTimes(2);
 });
+
+it('leaves /tv and /tv/ outside the player service worker scope', async () => {
+  const w = worker();
+  await w.dispatch('install');
+  expect(await w.dispatch('fetch', { request: w.request('/tv') })).toBeUndefined();
+  expect(await w.dispatch('fetch', { request: w.request('/tv/') })).toBeUndefined();
+});

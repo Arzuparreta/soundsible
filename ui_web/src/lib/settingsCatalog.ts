@@ -273,6 +273,21 @@ export const SETTINGS_CATALOG = {
         hint: 'settings.pairNote',
         aliases: ['settings.searchAliases.pairedDevices'],
       },
+      {
+        id: 'tv-url',
+        label: 'settings.tvUrl',
+        group: 'settings.group.tv',
+        hint: 'settings.tvUrlHint',
+        terms: ['TV', 'Smart TV', '/tv/'],
+      },
+      {
+        id: 'tv-approve',
+        label: 'settings.tvApprove',
+        group: 'settings.group.tv',
+        hint: 'settings.tvApproveHint',
+        aliases: ['tvApprove.title'],
+        terms: ['TV', 'QR', 'code'],
+      },
     ],
   },
   users: {

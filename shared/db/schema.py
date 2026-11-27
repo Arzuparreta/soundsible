@@ -497,6 +497,34 @@ class SchemaMixin:
                 conn.execute(f"ALTER TABLE pairing_sessions ADD COLUMN {col} {defn}")
 
     @staticmethod
+    def _create_tv_auth_table(conn):
+        """Short-lived Smart TV authorization requests; stores only SHA-256 hashes."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS tv_auth_requests (
+                id TEXT PRIMARY KEY,
+                code_hash TEXT NOT NULL UNIQUE,
+                handle_hash TEXT NOT NULL UNIQUE,
+                device_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                approved_user_id TEXT,
+                auth_token_id TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL,
+                approved_at TIMESTAMP,
+                redeemed_at TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tv_auth_requests_status
+            ON tv_auth_requests (status)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tv_auth_requests_expires
+            ON tv_auth_requests (expires_at)
+        """)
+
+    @staticmethod
     def _create_lyrics_table(conn):
         """Lyrics cache keyed by track id. Kept separate from the canonical
         library snapshot because lyrics are local-only and survive replaces."""
@@ -834,6 +862,7 @@ class SchemaMixin:
             self._create_auth_tables(conn)
             self._create_subsonic_credentials_table(conn)
             self._create_pairing_table(conn)
+            self._create_tv_auth_table(conn)
             self._create_lyrics_table(conn)
             self._create_discovery_tables(conn)
             self._create_discovery_graph_tables(conn)

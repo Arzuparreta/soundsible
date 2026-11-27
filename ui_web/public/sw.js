@@ -20,7 +20,8 @@ function serialize(task) {
 }
 function bypassed(url) {
   return url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')
-    || url.pathname.startsWith('/player/desktop');
+    || url.pathname.startsWith('/player/desktop')
+    || url.pathname === '/tv' || url.pathname.startsWith('/tv/');
 }
 function immutable(url) { return url.pathname.startsWith('/player/assets/'); }
 function revalidated(url) {
