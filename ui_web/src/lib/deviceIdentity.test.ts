@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { detectDeviceName, detectFormFactor, isDesktopShell, type DeviceEnvironment } from './deviceIdentity';
+import {
+  detectDeviceName,
+  detectFormFactor,
+  isDesktopShell,
+  isTouchFormFactor,
+  isTvShell,
+  TV_REMOTE_COMMANDS,
+  type DeviceEnvironment,
+} from './deviceIdentity';
 
 const env = (overrides: Partial<DeviceEnvironment> = {}): DeviceEnvironment => ({
   userAgent: '',
@@ -113,6 +121,40 @@ describe('deviceIdentity', () => {
 
       (window as Window & { __SOUNDSIBLE_OWNER_TOKEN__?: string }).__SOUNDSIBLE_OWNER_TOKEN__ = 'owner-secret';
       expect(isDesktopShell()).toBe(true);
+    });
+  });
+
+  describe('TV identity and commands', () => {
+    const originalPath = window.location.pathname;
+    afterEach(() => {
+      window.history.replaceState(null, '', originalPath);
+      delete document.documentElement.dataset.surface;
+    });
+
+    it('detects TV shell via data-surface or /tv/ route and marks TV as non-touch', () => {
+      expect(isTvShell()).toBe(false);
+      document.documentElement.dataset.surface = 'tv';
+      expect(isTvShell()).toBe(true);
+      expect(detectFormFactor()).toBe('tv');
+      expect(isTouchFormFactor()).toBe(false);
+
+      delete document.documentElement.dataset.surface;
+      window.history.replaceState(null, '', '/tv/');
+      expect(isTvShell()).toBe(true);
+    });
+
+    it('formats TV default names and excludes DJ, radio, and software volume commands', () => {
+      expect(detectDeviceName(env({ tv: true, userAgent: 'Mozilla/5.0 (Web0S; Linux/SmartTV)' }))).toBe('LG webOS TV');
+      expect(detectDeviceName(env({ tv: true, userAgent: 'SMART-TV; Tizen 7.0' }))).toBe('Samsung TV');
+      expect(detectDeviceName(env({ tv: true, userAgent: 'Mozilla/5.0' }))).toBe('Smart TV');
+
+      expect(TV_REMOTE_COMMANDS).toContain('transport.play');
+      expect(TV_REMOTE_COMMANDS).toContain('transport.seek');
+      expect(TV_REMOTE_COMMANDS).toContain('queue.play_entry');
+      expect(TV_REMOTE_COMMANDS).not.toContain('transport.set_volume');
+      expect(TV_REMOTE_COMMANDS).not.toContain('transport.set_muted');
+      expect(TV_REMOTE_COMMANDS).not.toContain('radio.start');
+      expect(TV_REMOTE_COMMANDS.some((cmd) => cmd.startsWith('dj.'))).toBe(false);
     });
   });
 });

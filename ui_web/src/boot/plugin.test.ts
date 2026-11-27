@@ -31,4 +31,16 @@ describe('boot plugin', () => {
     expect(themeBootScript()).not.toMatch(/__[A-Z_]+__/);
     expect(transform()).toContain(themeBootScript());
   });
+
+  it('leaves non-player HTML such as tv.html untouched without the phone splash', () => {
+    const tvHtml = '<html lang="en" data-surface="tv"><head></head><body><div id="tv-boot-screen"></div></body></html>';
+    expect(transform(tvHtml)).toBe(tvHtml);
+  });
+
+  it('injects window.soundsibleBootColors for tv.html without loading the player boot splash', () => {
+    const tvShell = '<html lang="en" data-surface="tv"><head><!-- soundsible:tv-boot-colors --></head><body><div id="tv-boot-screen"></div></body></html>';
+    const out = transform(tvShell);
+    expect(out).toContain('window.soundsibleBootColors');
+    expect(out).not.toContain('id="boot-screen"');
+  });
 });

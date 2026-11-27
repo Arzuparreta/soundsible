@@ -38,7 +38,7 @@ one device with two instances.
   "device_id": "…",
   "device_name": "Safari · iPhone",
   "device_type": "web | desktop | android | ios | agent | car",
-  "form_factor": "phone | tablet | computer",
+  "form_factor": "phone | tablet | computer | tv",
   "instance_id": "random per instance",
   "protocol": 1,
   "commands": ["transport.play", "transport.pause", "…"]
@@ -58,10 +58,16 @@ one device with two instances.
   <OS or device>`, for example `Safari · iPhone`, `Chrome · Android`,
   `Firefox · Linux`, `Soundsible · Windows` (desktop shell). No translated
   words, so no dictionary entry.
-- `form_factor` on the web: desktop shell → `computer`; coarse pointer with the
-  shorter screen side under 600 CSS px → `phone`; other coarse pointer or
-  `maxTouchPoints > 1` on a Mac user agent → `tablet`; otherwise `computer`.
+- `form_factor` on the web: Smart TV entrypoint (`/tv/`, `data-surface="tv"`) →
+  `tv`; desktop shell → `computer`; coarse pointer with the shorter screen side
+  under 600 CSS px → `phone`; other coarse pointer or `maxTouchPoints > 1` on a
+  Mac user agent → `tablet`; otherwise `computer`.
   Android: `phone`, or `tablet` when the smallest width is ≥ 600 dp.
+- Smart TV receivers register with `device_type: "web"`, `form_factor: "tv"`,
+  and declare the tested `TV_REMOTE_COMMANDS` subset (excluding `dj.*`,
+  `radio.*`, `transport.set_volume`, and `transport.set_muted`, and omitting
+  `live.volume` from published state so controllers keep hardware/platform
+  volume with the TV).
 
 ### Device row
 

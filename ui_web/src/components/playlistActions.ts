@@ -1,5 +1,5 @@
 import type { MenuEvent } from '../lib/menuEvent';
-import { collectionIndex } from '../lib/collectionIdentity';
+import { collectionIndex, resolveCollectionTracks } from '../lib/collectionIdentity';
 import { type ActionMenuOptions } from './ActionMenu';
 import { menuIcons } from './icons';
 import { collectionActions, type MusicCollection } from './collectionCommands';
@@ -25,7 +25,7 @@ export interface PlaylistMenuHooks {
 export function playlistTracks(name: string): Track[] {
   const ids = state.playlists[name] ?? [];
   const byId = collectionIndex(musicLibrary());
-  return ids.map((id) => byId.get(id)).filter((t): t is Track => !!t);
+  return resolveCollectionTracks(ids, byId);
 }
 
 /** A playlist as a collection the shared commands can play. */

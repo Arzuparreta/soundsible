@@ -410,6 +410,47 @@ export interface PairedDevice {
   revoked_at?: string | null;
 }
 
+export interface TvAuthRequest {
+  code: string;
+  redemption_handle: string;
+  device_name: string;
+  expires_at: string;
+  expires_in_sec: number;
+  poll_interval_ms: number;
+  approve_path: string;
+  approve_url: string;
+}
+
+export interface TvAuthStatus {
+  status: 'pending' | 'approved' | 'denied' | 'cancelled' | 'expired' | 'redeemed' | string;
+  device_name: string;
+  expires_at: string;
+}
+
+export interface TvAuthLookup {
+  code: string;
+  device_name: string;
+  status: string;
+  expires_at: string;
+}
+
+export interface TvAuthRedeemResult {
+  user: import('./session').User;
+  device_name: string;
+}
+
+export interface TvAuthApproveResult {
+  status: string;
+  device_name: string;
+  user: import('./session').User;
+}
+
+export interface PairingClaimSessionResult {
+  user?: import('./session').User;
+  session?: PairingSession;
+  auto_confirmed?: boolean;
+}
+
 /** Shape returned by every playlist mutation (`_playlist_mutation_response`). */
 export interface CollectionSnapshot {
   files: Track[];
@@ -636,6 +677,56 @@ export const api = {
   listPairedDevices: () => request<{ devices?: PairedDevice[] }>('/api/paired-devices'),
   revokePairedDevice: (tokenId: string) =>
     request<PairedDevice>(`/api/paired-devices/${encodeURIComponent(tokenId)}/revoke`, { method: 'POST' }),
+  claimPairingSession: (code: string, deviceName: string) =>
+    request<PairingClaimSessionResult>('/api/pairing/sessions/claim', {
+      method: 'POST',
+      body: {
+        code,
+        device_name: deviceName,
+        device_type: 'web',
+        credential: 'session',
+      },
+    }),
+
+  // ── Smart TV device authorization ──
+  createTvAuthRequest: (deviceName?: string) =>
+    request<TvAuthRequest>('/api/tv-auth/requests', {
+      method: 'POST',
+      body: deviceName ? { device_name: deviceName } : {},
+    }),
+  getTvAuthStatus: (redemptionHandle: string) =>
+    request<TvAuthStatus>('/api/tv-auth/status', {
+      method: 'POST',
+      body: { redemption_handle: redemptionHandle },
+    }),
+  redeemTvAuthRequest: (redemptionHandle: string) =>
+    request<TvAuthRedeemResult>('/api/tv-auth/redeem', {
+      method: 'POST',
+      body: { redemption_handle: redemptionHandle },
+    }),
+  cancelTvAuthRequest: (redemptionHandle: string) =>
+    request<{ status: string }>('/api/tv-auth/cancel', {
+      method: 'POST',
+      body: { redemption_handle: redemptionHandle },
+    }),
+  lookupTvAuthCode: (code: string) =>
+    request<TvAuthLookup>('/api/tv-auth/lookup', {
+      method: 'POST',
+      headers: { 'X-Soundsible-CSRF': '1' },
+      body: { code },
+    }),
+  approveTvAuthCode: (code: string) =>
+    request<TvAuthApproveResult>('/api/tv-auth/approve', {
+      method: 'POST',
+      headers: { 'X-Soundsible-CSRF': '1' },
+      body: { code },
+    }),
+  denyTvAuthCode: (code: string) =>
+    request<{ status: string }>('/api/tv-auth/deny', {
+      method: 'POST',
+      headers: { 'X-Soundsible-CSRF': '1' },
+      body: { code },
+    }),
 
   /** The whole library in one payload. Deliberately past the default deadline:
    * a few thousand tracks over a phone's link to a home server can outrun 8s,

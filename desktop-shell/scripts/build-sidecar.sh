@@ -40,6 +40,7 @@ cd "$ROOT"
 npm --prefix "$ROOT/ui_web" ci
 "$PYTHON" -c 'from shared.ensure_ui_dist import ensure_ui_dist_cli; raise SystemExit(ensure_ui_dist_cli(["--force"]))'
 test -f "$ROOT/ui_web/dist/index.html"
+test -f "$ROOT/ui_web/dist/tv.html"
 
 "$PYTHON" -m PyInstaller "$SPEC" --noconfirm --clean --distpath "$ROOT/dist" --workpath "$ROOT/build/pyinstaller-sidecar"
 

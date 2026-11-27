@@ -21,7 +21,7 @@ The previous proposal named `tv.spotify.com` and a specific LG package manifest.
 - **Listen.** Now Playing shows artwork, title, artist, elapsed time, Play/Pause, Previous, Next and Queue. On an explicitly focused seek control, Left/Right preview the position, OK commits and Back cancels. In Queue, identify the current track and let OK on an upcoming track select it by queue ID. Browsing and opening the queue preserve audio. A user-selected dim view hides bright static artwork and controls. The first directional key restores the view and focus without also navigating. Keep system volume, Home and power with the platform.
 - **Focus.** Left/Right move along a shelf, Up/Down move to the adjacent shelf at the closest visible column. Left at the first card opens the rail. Returning from the rail restores the last card. Clamp at other edges. List movement scrolls just enough to reveal the whole target. Use native focusable elements, stable IDs and one active target. Repeated arrow presses may navigate, held OK activates once. Pointer movement takes over on deliberate movement. Switching back to arrows starts at the last active item. An artwork load, remote track change or late search response cannot steal focus.
 - **Back.** Close keyboard, dialog or queue overlay first, then pop the route and restore its scroll position and focused item. If the item disappeared, choose the nearest surviving sibling or section entry. At root, let the host leave. Provide an on-screen Back action on detail views for browsers that consume the hardware key. Trap focus only in the topmost modal.
-- **Readability.** At a 1920 × 1080 design viewport, start with 32 px body text, 44 px titles, 64 px minimum control height and 5% margins around essential actions. Scale for the actual CSS viewport. Use a solid focus outline plus a surface change visible over both light and dark artwork. Distinguish focus, selected and playing. Support reduced motion, localized labels, long titles, missing artwork and system keyboard input. Check from three metres in daylight and in a dark room. These dimensions are starting points for that test. [Android adaptive TV guidance](https://developer.android.com/develop/adaptive-apps/guides/tv/build-adaptive-apps-for-tv)
+- **Readability.** At a 1920 × 1080 design viewport, start with 32 px body text, 44 px titles, 64 px minimum control height and use the shared spacing scale around controls. The sidebar uses compact padding, and other TV screens and overlays use standard layout gaps. Scale for the actual CSS viewport. Use a solid focus outline plus a surface change visible over both light and dark artwork. Distinguish focus, selected and playing. Support reduced motion, localized labels, long titles, missing artwork and system keyboard input. Check from three metres in daylight and in a dark room. These dimensions are starting points for that test. [Android adaptive TV guidance](https://developer.android.com/develop/adaptive-apps/guides/tv/build-adaptive-apps-for-tv)
 
 ## Architecture and distribution decision
 
@@ -33,6 +33,29 @@ Add a SolidJS entry under `ui_web/src/tv/`. Its responsibilities are the TV shel
 4. Target the LG browser first. Start by probing a webOS 24-class Chromium 108 engine and a current set. Select the oldest supported model from real results. Check emitted JS, CSS, cookies, storage, Web Audio, media codecs, streaming/seek and socket reconnection on LAN HTTP and on the station's HTTPS origin. If lowering the compilation target becomes necessary, measure a TV-specific build before changing the desktop target. A small static boot message should survive failure to parse the app.
 5. A later LG hosted launcher can save the station URL and load the same interface. Compare it on-device with a packaged client if origin restrictions, remote events, session persistence or store rules block that route. Samsung Tizen needs its own input/lifecycle adapter and qualification. Android/Fire TV native shells merit a separate decision where browser availability or background audio is inadequate. Casting is a complementary phone-driven entry. It cannot satisfy the independent browse-and-play journey.
 
+### Shared web UI
+
+The current delivery is the station's browser entry at `/tv/`. Measure the
+oldest usable browser by testing that URL on real hardware. Store publishing
+and launchers are separate future work.
+
+The TV rail shares the web navigation item content, SVGs and selected style.
+It reserves a fixed collapsed column and opens over the content on D-pad focus.
+The shell owns direction handling, modal scope, route Back and scroll restore.
+Cards and track rows use shared artwork. Collection headings, playlist identity
+and local search reuse the web implementations. TV list navigation adapts
+`CollectionRows` by pinning a requested row until it mounts, then moving DOM
+focus. The queue identifies each row by its playback occurrence.
+
+Home offers one playable track even when it has no album metadata. The main
+action resumes a session, opens local playback in progress, or plays a library
+track. Library remembers an explicit tab choice and otherwise opens a populated
+collection. Back leaves a search field for the rail. Collection details put Play
+and Back next to the title. Now Playing opens on the transport, with seek above
+and the queue and dim controls below. The queue drawer scrolls its tracks
+independently of its heading. Home and Now Playing reuse the web player's
+cached artwork backdrop. The physical TV qualification gate below is still open.
+
 ## Sign-in and account boundaries
 
 The current signed-in display creates a code and the **claiming device** gets the session cookie in `shared/api/routes/pairing.py`. Reuse that today by letting the user display a code on an authorized device and enter it on the TV with the pairing sheet open. Preserve existing station login and trusted-network rules. Acknowledge expiry, allow retry, and retain the selected station. Confirm the existing route's account and permission requirements on a non-admin account before enabling this option.
@@ -41,12 +64,12 @@ For the preferred TV-displays-code journey, implement a distinct device authoriz
 
 ## Implementation order and review gates
 
-| Slice | Deliverable | Evidence required before moving on |
-| --- | --- | --- |
-| Hardware probe | Minimal station-served page on the intended LG. Open by URL with the actual remote. Capture model, firmware, viewport, received input events, first user-initiated audio, suspend and return. | A listener reaches audible playback using the remote. If the browser consumes essential navigation or cannot stream a supported track, test the hosted launcher before building screens. |
-| Entry and identity | Build/serve the second entry, select account, implement sign-in and teardown. Keep host-specific behavior at the shell boundary. | Route, cache, stale/missing dist, cross-account isolation and authorization tests. Restart the browser and verify the session and sign-out. |
-| Core listening | Ship Home, Library, Search, collection detail, Now Playing, Queue and dim view. Add remote receiver capability declarations and lifecycle recovery. | From cold start play a track, browse without interruption, change track from a phone, disconnect the phone and pause on the TV. Reconnect a dropped socket and verify one command produces one action. |
-| Qualification | Browser fixtures plus a physical LG run. Record separate results for browser and installed launcher if applicable. | Publish only the tested model/mode combinations. Add user setup instructions once paths and supported behavior are verified. |
+| Slice | Deliverable | Evidence required before moving on | Status |
+| --- | --- | --- | --- |
+| Hardware probe | Minimal station-served page on the intended LG. Open by URL with the actual remote. Capture model, firmware, viewport, received input events, first user-initiated audio, suspend and return. | A listener reaches audible playback using the remote. If the browser consumes essential navigation or cannot stream a supported track, test the hosted launcher before building screens. | Open — awaiting physical LG hardware test |
+| Entry and identity | Build/serve the second entry, select account, implement sign-in and teardown. Keep host-specific behavior at the shell boundary. | Route, cache, stale/missing dist, cross-account isolation and authorization tests. Restart the browser and verify the session and sign-out. | Implemented & covered by backend/unit/browser checks (physical TV pending) |
+| Core listening | Ship Home, Library, Search, collection detail, Now Playing, Queue and dim view. Add remote receiver capability declarations and lifecycle recovery. | From cold start play a track, browse without interruption, change track from a phone, disconnect the phone and pause on the TV. Reconnect a dropped socket and verify one command produces one action. | Implemented & covered by backend/unit/browser checks (physical TV pending) |
+| Qualification | Browser fixtures plus a physical LG run. Record separate results for browser and installed launcher if applicable. | Publish only the tested model/mode combinations. Add user setup instructions once paths and supported behavior are verified. | Open — physical LG run & firmware qualification not yet performed |
 
 For the implementation PR, run API and store tests, the full web unit suite and all four existing Playwright profiles, followed by a TV viewport suite covering key sequences, long lists, dialogs, restore after Back, pointer handoff and repeated keys. Test the production entry served by Flask as well as the Vite test fixture. Check boot payload against the existing desktop budget. Attach a short PR recording of the first-play journey and focus restoration.
 

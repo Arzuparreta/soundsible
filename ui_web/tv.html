@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en" data-surface="tv" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c0c0e" />
+    <title>Soundsible TV</title>
+    <link rel="icon" type="image/svg+xml" href="/player/icon.svg" />
+    <style>
+      html[data-surface='tv'],
+      html[data-surface='tv'] body {
+        margin: 0;
+        padding: 0;
+        background: #0c0c0e;
+        color: #f4f4f6;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        overflow: hidden;
+      }
+
+      #tv-boot-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+        padding: 48px;
+        background: #0c0c0e;
+        color: #f4f4f6;
+        text-align: center;
+      }
+
+      #tv-boot-screen[hidden] {
+        display: none;
+      }
+
+      .tv-boot-mark {
+        width: 84px;
+        height: 84px;
+        border-radius: 22px;
+        background: #1c1d22;
+        border: 2px solid rgba(255, 255, 255, 0.14);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 38px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: #7c9cff;
+      }
+
+      #tv-boot-title {
+        margin: 0;
+        font-size: 40px;
+        font-weight: 600;
+        line-height: 1.15;
+      }
+
+      #tv-boot-msg {
+        margin: 0;
+        max-width: 720px;
+        font-size: 28px;
+        line-height: 1.4;
+        color: #b7b9c4;
+      }
+
+      #tv-boot-retry {
+        min-height: 64px;
+        min-width: 240px;
+        padding: 16px 36px;
+        border-radius: 14px;
+        border: 3px solid #ffffff;
+        background: #232630;
+        color: #ffffff;
+        font-size: 28px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      #tv-boot-retry[hidden] {
+        display: none;
+      }
+    </style>
+    <!-- soundsible:tv-boot-colors -->
+    <script>
+      (function () {
+        var mounted = false;
+        var failed = false;
+        var timer = 0;
+
+        function getEl(id) {
+          return document.getElementById(id);
+        }
+
+        function showFailure(reason) {
+          if (mounted) return;
+          failed = true;
+          if (timer) {
+            window.clearTimeout(timer);
+            timer = 0;
+          }
+          var msg = getEl('tv-boot-msg');
+          var retry = getEl('tv-boot-retry');
+          if (msg) {
+            msg.textContent = reason || 'Could not start Soundsible TV on this display.';
+          }
+          if (retry) {
+            retry.removeAttribute('hidden');
+            try {
+              retry.focus();
+            } catch (e) {}
+          }
+        }
+
+        function markReady() {
+          if (mounted) return;
+          mounted = true;
+          if (timer) {
+            window.clearTimeout(timer);
+            timer = 0;
+          }
+          var screen = getEl('tv-boot-screen');
+          if (screen && screen.parentNode) {
+            screen.parentNode.removeChild(screen);
+          }
+        }
+
+        function onEarlyError() {
+          if (!mounted && !failed) {
+            showFailure('Soundsible TV encountered a startup error on this device.');
+          }
+        }
+
+        window.addEventListener('error', onEarlyError);
+        window.addEventListener('unhandledrejection', onEarlyError);
+
+        window.__SOUNDSIBLE_TV_BOOT__ = {
+          ready: function () {
+            window.removeEventListener('error', onEarlyError);
+            window.removeEventListener('unhandledrejection', onEarlyError);
+            markReady();
+          },
+          fail: function (reason) {
+            showFailure(reason);
+          }
+        };
+
+        document.addEventListener('DOMContentLoaded', function () {
+          var retry = getEl('tv-boot-retry');
+          if (retry) {
+            retry.addEventListener('click', function () {
+              window.location.reload();
+            });
+          }
+        });
+
+        timer = window.setTimeout(function () {
+          if (!mounted) {
+            showFailure('Taking longer than expected to load Soundsible TV.');
+          }
+        }, 15000);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="tv-boot-screen" role="status" aria-live="polite">
+      <div class="tv-boot-mark" aria-hidden="true">S</div>
+      <h1 id="tv-boot-title">Soundsible TV</h1>
+      <p id="tv-boot-msg">Starting Soundsible…</p>
+      <button id="tv-boot-retry" type="button" hidden>Reload</button>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/tv/main.tsx"></script>
+  </body>
+</html>

@@ -2,7 +2,7 @@ import { CollectionToolbar } from '../components/CollectionToolbar';
 import { EntityHero } from '../components/EntityHero';
 import { CollectionEmpty, createCollectionSearch } from '../components/CollectionSearch';
 import { trackSearchFields } from '../lib/librarySearch';
-import { collectionId, collectionIndex } from '../lib/collectionIdentity';
+import { collectionId, collectionIndex, resolveCollectionTracks } from '../lib/collectionIdentity';
 import { createEffect, createMemo, createSignal, on, Show } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { actions, state, musicLibrary } from '../stores';
@@ -16,7 +16,6 @@ import { trackCoverUrl } from '../lib/media';
 import { pickPlaylistCoverTrack } from '../lib/playlists';
 import { NEUTRAL_COVER } from '../lib/cover';
 import { t } from '../lib/i18n';
-import type { Track } from '../types/music';
 import hero from '../components/EntityHero.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonToolbar } from '../design/Skeleton';
@@ -34,9 +33,7 @@ export default function PlaylistDetail() {
   const name = createMemo(() => decodeURIComponent(params.name ?? ''));
   const trackIds = createMemo<string[]>(() => state.playlists[name()] ?? []);
   const byId = createMemo(() => collectionIndex(musicLibrary()));
-  const tracks = createMemo<Track[]>(() => trackIds()
-    .map((id) => byId().get(id))
-    .filter((t): t is Track => !!t));
+  const tracks = createMemo(() => resolveCollectionTracks(trackIds(), byId()));
 
   const search = createCollectionSearch();
   const filteredTracks = search.filter(tracks, trackSearchFields);
