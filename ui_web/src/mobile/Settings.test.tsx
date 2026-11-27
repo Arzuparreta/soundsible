@@ -22,6 +22,7 @@ it('returns from appearance/accessibility to account before leaving Settings', a
   await fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
   await fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
   expect(document.documentElement).toHaveAttribute('data-custom-colors');
+  await fireEvent.click(screen.getByRole('button', { name: 'Choose my own colors' }));
   expect(screen.getByRole('textbox', { name: 'Background (HEX)' })).toBeVisible();
   expect(dispatchNavigationBack()).toBe(true); expect(screen.getByTestId('account')).toBeVisible();
   await fireEvent.click(screen.getByRole('button', { name: 'Accessibility' }));

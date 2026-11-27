@@ -34,9 +34,10 @@ music import. Some settings belong to each person and some only to an admin;
 ### Custom colors
 
 Open **Settings → Appearance → Custom** on the web player, desktop or Android.
-Choose a **Background** and **Accent** with the color pickers or enter sRGB hex
-values. The player updates as you edit, and derives shades for readable text,
-controls and artwork-tinted glass. **Reset colors** restores the starting pair.
+Pick a coordinated palette to apply its background and accent together.
+Open **Choose my own colors** to adjust either color with the picker or enter a
+hex value. Changes apply immediately. The player derives readable shades for
+text, controls and artwork-tinted glass. **Reset colors** restores the Tide palette.
 You can switch to **System**, **Dark** or **Light** and return to your custom
 pair later.
 
