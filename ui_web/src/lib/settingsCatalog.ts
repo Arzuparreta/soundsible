@@ -83,6 +83,7 @@ export const SETTINGS_CATALOG = {
           'settings.themeSystem',
           'settings.themeCustom',
           'settings.customColors',
+          'settings.colorPalettes',
           'settings.canvasColor',
           'settings.accentColor',
           'settings.searchAliases.theme',

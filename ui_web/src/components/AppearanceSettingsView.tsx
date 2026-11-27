@@ -1,9 +1,10 @@
 import { createEffect, createSignal, createUniqueId, For, on, Show } from 'solid-js';
-import { DEFAULT_CUSTOM_COLORS, normalizeHex } from '../boot/customColors.js';
+import { DEFAULT_CUSTOM_COLORS, deriveCustomColors, normalizeHex } from '../boot/customColors.js';
 import type { Theme } from '../boot/themes';
 import { ColorControl, Control, TextControl } from '../design/Control';
 import type { CustomColors } from '../lib/colorPreferences';
 import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
+import { CheckIcon, ChevronDownIcon } from './icons';
 import { ChoiceGroup, SelectRow, SettingsGroup } from './SettingsRows';
 import styles from './AppearanceSettingsView.module.css';
 
@@ -71,32 +72,68 @@ function ColorField(props: { label: string; value: string; reset: number; update
   </div>;
 }
 
+const palettes = [
+  { label: 'settings.paletteTide', colors: DEFAULT_CUSTOM_COLORS },
+  { label: 'settings.paletteEmber', colors: { canvas: '#322026', accent: '#ffb289' } },
+  { label: 'settings.paletteClay', colors: { canvas: '#f6e9d8', accent: '#934627' } },
+  { label: 'settings.paletteSage', colors: { canvas: '#e2ece1', accent: '#32604b' } },
+] as const;
+
+function CustomColorEditor(props: { colors: CustomColors; apply: (colors: CustomColors) => void }) {
+  const matches = (colors: CustomColors) => props.colors.canvas === colors.canvas && props.colors.accent === colors.accent;
+  const [expanded, setExpanded] = createSignal(!palettes.some(palette => matches(palette.colors)));
+  const [reset, setReset] = createSignal(0);
+  const fieldsId = createUniqueId();
+  function choose(colors: CustomColors) {
+    props.apply(colors);
+    setReset(value => value + 1);
+  }
+  function update(key: keyof CustomColors, value: string) {
+    if (value !== props.colors[key]) props.apply({ ...props.colors, [key]: value });
+  }
+  return <SettingsGroup label={t('settings.colorPalettes')}>
+    <div class={styles.editor}>
+      <div class={styles.palettes}>
+        <For each={palettes}>{palette => {
+          const { tokens } = deriveCustomColors(palette.colors);
+          return <Control class={styles.palette} aria-pressed={matches(palette.colors)} onClick={() => choose(palette.colors)}>
+            <span class={styles.sample} aria-hidden="true" style={{ '--sample-base': tokens['bg-base'], '--sample-accent': tokens.accent }} />
+            <span class={styles.caption}>{t(palette.label)}
+              <Show when={matches(palette.colors)}><CheckIcon /></Show>
+            </span>
+          </Control>;
+        }}</For>
+      </div>
+      <div class={styles.tools}>
+        <Control class={styles.disclosure} aria-expanded={expanded()} aria-controls={fieldsId}
+          onClick={() => setExpanded(value => !value)}>
+          {t('settings.chooseColors')}<ChevronDownIcon />
+        </Control>
+        <Show when={expanded()}>
+          <Control class={styles.reset} onClick={() => choose(DEFAULT_CUSTOM_COLORS)}>{t('settings.resetColors')}</Control>
+        </Show>
+      </div>
+      <div id={fieldsId} hidden={!expanded()}>
+        <div class={styles.fields}>
+          <ColorField label={t('settings.canvasColor')} value={props.colors.canvas} reset={reset()} update={value => update('canvas', value)} />
+          <ColorField label={t('settings.accentColor')} value={props.colors.accent} reset={reset()} update={value => update('accent', value)} />
+        </div>
+      </div>
+    </div>
+  </SettingsGroup>;
+}
+
 /** Shared by the browser player, desktop WebView and offline Android client. */
 export function AppearanceSettingsView(props: {
   theme: Theme;
   colors: CustomColors;
   onTheme: (theme: Theme, colors?: CustomColors) => void;
 }) {
-  const update = (key: keyof CustomColors, value: string) => {
-    if (value !== props.colors[key]) props.onTheme('custom', { ...props.colors, [key]: value });
-  };
-  const [reset, setReset] = createSignal(0);
   return <>
     <ChoiceGroup anchor="theme" label={t('settings.theme')} value={props.theme} onChange={props.onTheme}
       options={order.map(theme => ({ value: theme, label: labels[theme](), hint: theme === 'system' ? t('settings.note.theme') : undefined }))} />
     <Show when={props.theme === 'custom'}>
-      <SettingsGroup label={t('settings.customColors')}>
-        <div class={styles.editor}>
-          <Control class={styles.reset} onClick={() => {
-            props.onTheme('custom', DEFAULT_CUSTOM_COLORS);
-            setReset(reset() + 1);
-          }}>{t('settings.resetColors')}</Control>
-          <div class={styles.fields}>
-            <ColorField label={t('settings.canvasColor')} value={props.colors.canvas} reset={reset()} update={value => update('canvas', value)} />
-            <ColorField label={t('settings.accentColor')} value={props.colors.accent} reset={reset()} update={value => update('accent', value)} />
-          </div>
-        </div>
-      </SettingsGroup>
+      <CustomColorEditor colors={props.colors} apply={colors => props.onTheme('custom', colors)} />
     </Show>
     <SettingsGroup><SelectRow anchor="language" label={t('settings.language')} value={locale()} onChange={value => void setLocale(value as Locale)}>
       <For each={LOCALES}>{language => <option value={language.code}>{language.native}</option>}</For>
