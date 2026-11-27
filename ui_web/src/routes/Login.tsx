@@ -1,5 +1,6 @@
 import { Show, createSignal } from 'solid-js';
 import Button from '../components/Button';
+import { BrandIcon } from '../components/BrandIcon';
 import { t } from '../lib/i18n';
 import { login } from '../lib/session';
 import { AccessibilityButton } from '../components/DisplayPreferences';
@@ -57,7 +58,7 @@ export default function Login() {
       <div class={styles.card}>
         <AccessibilityButton class={styles.accessibilityButton} />
         <div class={styles.brand}>
-          <img class={styles.mark} src="/player/branding/logo-app.png" alt="" />
+          <BrandIcon class={styles.mark} />
           <h1 class={styles.title}>{t('login.title')}</h1>
           <p class={styles.blurb}>{t('login.blurb')}</p>
         </div>

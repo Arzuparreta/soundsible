@@ -1,4 +1,5 @@
 import { For, type JSX } from 'solid-js';
+import { BrandIcon } from '../../components/BrandIcon';
 import { ArtistIcon, HomeIcon, NavigationSearchIcon, PlaylistIcon, QueueListIcon } from '../../components/icons';
 import { NavigationItemContent } from '../../components/NavigationItemContent';
 import navStyles from '../../components/NavigationMenu.module.css';
@@ -42,7 +43,7 @@ export function TvRail(props: TvRailProps) {
       aria-label={t('tv.title')}
     >
       <div class={styles.tvBrand} aria-hidden="true">
-        <img src={`${import.meta.env.BASE_URL}icons/icon-192.png`} alt="" />
+        <BrandIcon />
         <span hidden={!focus.inRail()}>soundsible</span>
       </div>
       <nav
