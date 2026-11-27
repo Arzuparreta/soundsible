@@ -871,8 +871,6 @@
   --tv-font-caption: calc(22 * var(--tv-u));
 
   --tv-control-min-h: calc(64 * var(--tv-u));
-  --tv-safe-x: 5vw;
-  --tv-safe-y: 5vh;
 
   --tv-gap-xs: calc(12 * var(--tv-u));
   --tv-gap-sm: calc(20 * var(--tv-u));

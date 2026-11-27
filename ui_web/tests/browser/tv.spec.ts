@@ -179,7 +179,7 @@ async function setupTvSession(
   };
 }
 
-test('readability metrics, 5% safe margins, and responsive 1080p/720p scaling', async ({ page }, testInfo) => {
+test('readability, compact rail inset, and responsive 1080p/720p scaling', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes('mobile'), 'Smart TV runs on living-room viewports');
 
   await setupTvSession(page, { viewport: { width: 1920, height: 1080 } });
@@ -192,7 +192,7 @@ test('readability metrics, 5% safe margins, and responsive 1080p/720p scaling', 
 
   const metrics1080 = await page.evaluate(() => {
     const main = document.querySelector('[data-tv-scroll-y="main"]') as HTMLElement;
-    const btn = document.querySelector('[data-tv-id="home-signout-btn"], [data-tv-id="rail-home"]') as HTMLElement;
+    const btn = document.querySelector('[data-tv-id="rail-home"]') as HTMLElement;
     const styleRoot = window.getComputedStyle(document.querySelector('[class*="tvRoot"]') as HTMLElement);
     const mainStyle = window.getComputedStyle(main);
     const btnRect = btn.getBoundingClientRect();
@@ -205,15 +205,19 @@ test('readability metrics, 5% safe margins, and responsive 1080p/720p scaling', 
     };
   });
   expect(metrics1080.fontPx).toBeGreaterThanOrEqual(31);
-  expect(metrics1080.leftPx).toBeGreaterThanOrEqual(96);
-  expect(metrics1080.padRightPx).toBeGreaterThanOrEqual(96);
-  expect(metrics1080.padTopPx).toBeGreaterThanOrEqual(50);
+  expect(metrics1080.leftPx).toBeGreaterThanOrEqual(16);
+  expect(metrics1080.leftPx).toBeLessThanOrEqual(24);
+  expect(metrics1080.padRightPx).toBeCloseTo(28);
+  expect(metrics1080.padTopPx).toBeCloseTo(28);
   expect(metrics1080.btnHeightPx).toBeGreaterThanOrEqual(63);
 
   await page.setViewportSize({ width: 1280, height: 720 });
   const font720 = await page.evaluate(() =>
     parseFloat(window.getComputedStyle(document.querySelector('[class*="tvRoot"]') as HTMLElement).fontSize),
   );
+  const rail720 = await page.locator('[data-tv-id="rail-home"]').boundingBox();
+  expect(rail720!.x).toBeGreaterThanOrEqual(10);
+  expect(rail720!.x).toBeLessThanOrEqual(18);
   expect(font720).toBeGreaterThanOrEqual(20);
   expect(font720).toBeLessThan(metrics1080.fontPx);
 });

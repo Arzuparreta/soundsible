@@ -25,7 +25,7 @@
 
 .tvRailSlot {
   flex: none;
-  width: calc(var(--tv-safe-x) + var(--tv-rail-collapsed-w));
+  width: var(--tv-rail-collapsed-w);
 }
 
 .tvRail {
@@ -37,18 +37,18 @@
   position: absolute;
   inset: 0 auto 0 0;
   box-sizing: border-box;
-  width: calc(var(--tv-safe-x) + var(--tv-rail-collapsed-w));
+  width: var(--tv-rail-collapsed-w);
   display: flex;
   flex-direction: column;
   gap: var(--tv-gap-sm);
-  padding: var(--tv-safe-y) var(--tv-gap-sm) var(--tv-safe-y) calc(var(--tv-safe-x) + var(--tv-gap-sm));
+  padding: var(--tv-gap-md) var(--tv-gap-sm);
   background: var(--tv-surface);
   border-right: 1px solid var(--tv-border);
   z-index: 10;
 }
 
 .tvRailExpanded {
-  width: min(calc(var(--tv-safe-x) + var(--tv-rail-w)), 50vw);
+  width: min(var(--tv-rail-w), 50vw);
   box-shadow: var(--tv-card-shadow);
 }
 
@@ -113,7 +113,7 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--tv-safe-y) var(--tv-safe-x) var(--tv-safe-y) var(--tv-gap-md);
+  padding: var(--tv-gap-md);
   display: flex;
   flex-direction: column;
   gap: var(--tv-gap-lg);
@@ -575,7 +575,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--tv-gap-md);
-  padding: var(--tv-gap-sm) var(--tv-safe-x);
+  padding: var(--tv-gap-sm) var(--tv-gap-md);
   background: var(--tv-surface);
   border-top: 1px solid var(--tv-border);
 }
@@ -588,13 +588,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--tv-safe-y) var(--tv-safe-x);
+  padding: var(--tv-gap-md);
 }
 
 .tvModal {
   width: 100%;
   max-width: var(--tv-modal-w);
-  max-height: 86vh;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--tv-gap-md);
@@ -616,7 +616,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--tv-gap-sm);
-  padding: var(--tv-safe-y) var(--tv-safe-x);
+  padding: var(--tv-gap-md);
   text-align: center;
 }
 
@@ -626,7 +626,7 @@
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--tv-safe-y) var(--tv-safe-x);
+  padding: var(--tv-gap-md);
   display: flex;
   flex-direction: column;
   gap: var(--tv-gap-lg);
@@ -688,8 +688,8 @@
 
 .tvToast {
   position: fixed;
-  right: var(--tv-safe-x);
-  bottom: var(--tv-safe-y);
+  right: var(--tv-gap-md);
+  bottom: var(--tv-gap-md);
   z-index: 60;
   padding: var(--tv-gap-sm) var(--tv-gap-md);
   border-radius: var(--tv-radius-md);
