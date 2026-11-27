@@ -1,4 +1,5 @@
 import { Show } from 'solid-js';
+import { PauseFilledIcon, PlayFilledIcon } from '../../components/icons';
 import { Control } from '../../design/Control';
 import { t } from '../../lib/i18n';
 import { trackCoverUrl } from '../../lib/media';
@@ -55,6 +56,7 @@ export function TvMiniBar(props: TvMiniBarProps) {
                 classList={{ [styles.tvFocusTarget]: true }}
                 onClick={() => actions.togglePlay()}
               >
+                {state.playback.isPlaying ? <PauseFilledIcon /> : <PlayFilledIcon />}
                 {state.playback.isPlaying ? t('tv.pause') : t('tv.play')}
               </Control>
             }

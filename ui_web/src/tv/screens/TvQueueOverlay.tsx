@@ -1,11 +1,10 @@
 import { createEffect, onCleanup, Show, untrack } from 'solid-js';
 import { Control } from '../../design/Control';
-import { formatDuration } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { trackCoverUrl } from '../../lib/media';
 import { actions, state } from '../../stores';
-import { TvArtwork } from '../components/TvArtwork';
-import { TvVirtualList } from '../components/TvVirtualList';
+import { TvTrackRow } from '../components/TvTrackRow';
+import { TvVirtualList, tvListItemId } from '../components/TvVirtualList';
 import { useTvFocus } from '../nav/spatial';
 import { queueOpen, setQueueOpen } from '../state';
 import styles from '../styles/tv.module.css';
@@ -17,7 +16,7 @@ export function TvQueueOverlay() {
     if (!queueOpen()) return;
     const initialRow = untrack(() =>
       state.playback.queue.length > 0
-        ? `tv-queue-rows-item-${Math.max(0, state.playback.index)}`
+        ? tvListItemId('tv-queue-rows', state.playback.queue[Math.max(0, state.playback.index)]?.queueId ?? '')
         : 'tv-queue-close',
     );
     focus.pushModal('tv-queue', initialRow);
@@ -74,46 +73,30 @@ export function TvQueueOverlay() {
           >
             <TvVirtualList
               items={state.playback.queue}
+              itemKey={entry => entry.queueId}
               groupId="tv-queue-rows"
               order={20}
-              maxVisible={12}
+
               initialIndex={Math.max(0, state.playback.index)}
               insideModal
               railEdge={false}
               renderRow={(entry, index, tvId) => {
-                const isCurrent = () => index === state.playback.index;
+                const isCurrent = () => index() === state.playback.index;
                 return (
-                  <Control
-                    role="listitem"
-                    data-tv-id={tvId}
-                    data-tv-group="tv-queue-rows"
-                    data-tv-index={String(index)}
-                    data-tv-focused={focus.activeId() === tvId ? 'true' : undefined}
-                    class={styles.tvTrackRow}
-                    classList={{
-                      [styles.tvFocusTarget]: true,
-                      [styles.tvTrackRowPlaying]: isCurrent(),
-                    }}
-                    onClick={() => {
-                      actions.playQueueEntry(entry.queueId);
+                  <TvTrackRow
+                    id={tvId()}
+                    group="tv-queue-rows"
+                    index={index()}
+                    title={entry().title}
+                    artist={entry().artist}
+                    artwork={trackCoverUrl(entry(), 'thumb')}
+                    duration={entry().duration}
+                    playing={isCurrent()}
+                    onActivate={() => {
+                      actions.playQueueEntry(entry().queueId);
                       setQueueOpen(false);
                     }}
-                  >
-                    <TvArtwork
-                      class={styles.tvTrackArt}
-                      src={trackCoverUrl(entry, 'thumb')}
-                      alt={entry.title}
-                      fallbackLabel={entry.title}
-                    />
-                    <div class={styles.tvTrackMain}>
-                      <span class={styles.tvTrackTitle}>{entry.title}</span>
-                      <span class={styles.tvTrackSub}>{entry.artist}</span>
-                    </div>
-                    <Show when={isCurrent()}>
-                      <span class={styles.tvPlayingBadge}>{t('tv.player.playingNow')}</span>
-                    </Show>
-                    <span class={styles.tvTrackDuration}>{formatDuration(entry.duration)}</span>
-                  </Control>
+                  />
                 );
               }}
             />

@@ -1,11 +1,14 @@
 import { createMemo, Show } from 'solid-js';
+import { BackIcon, PlayFilledIcon } from '../../components/icons';
+import { EntityIdentity } from '../../design/EntityIdentity';
 import { Control } from '../../design/Control';
-import { formatDuration, trackCount } from '../../lib/format';
+import { trackCount } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { trackCoverUrl } from '../../lib/media';
 import { playlistContext } from '../../lib/playbackContext';
 import { actions, isPlayingTrack, musicLibrary, state } from '../../stores';
 import { TvArtwork } from '../components/TvArtwork';
+import { TvTrackRow } from '../components/TvTrackRow';
 import { TvVirtualList } from '../components/TvVirtualList';
 import { useTvFocus } from '../nav/spatial';
 import { buildTrackIndex, playlistCoverUrl, resolvePlaylistTracks } from '../tvLibraryHelpers';
@@ -21,7 +24,7 @@ export function TvPlaylistDetail(props: TvPlaylistDetailProps) {
   const trackIndex = createMemo(() => buildTrackIndex(musicLibrary(), state.library));
 
   const tracks = createMemo(() =>
-    resolvePlaylistTracks(props.playlistName, state.playlists, musicLibrary(), state.library),
+    resolvePlaylistTracks(props.playlistName, state.playlists, trackIndex()),
   );
 
   const cover = createMemo(() =>
@@ -52,7 +55,7 @@ export function TvPlaylistDetail(props: TvPlaylistDetailProps) {
           classList={{ [styles.tvFocusTarget]: true }}
           onClick={props.onBack}
         >
-          ← {t('tv.back')}
+          <BackIcon /> {t('tv.back')}
         </Control>
         <Show when={tracks().length > 0}>
           <Control
@@ -64,7 +67,7 @@ export function TvPlaylistDetail(props: TvPlaylistDetailProps) {
             classList={{ [styles.tvFocusTarget]: true }}
             onClick={() => playAt(0)}
           >
-            ▶ {t('tv.library.playAll')}
+            <PlayFilledIcon /> {t('tv.library.playAll')}
           </Control>
         </Show>
       </div>
@@ -76,10 +79,12 @@ export function TvPlaylistDetail(props: TvPlaylistDetailProps) {
           alt={props.playlistName}
           fallbackLabel={props.playlistName}
         />
-        <div class={styles.tvDetailInfo}>
-          <h1 class={styles.tvHeroTitle}>{props.playlistName}</h1>
-          <p class={styles.tvSubtitle}>{trackCount(tracks().length)}</p>
-        </div>
+        <EntityIdentity
+          class={styles.tvDetailInfo}
+          headingClass={styles.tvHeroTitle}
+          title={props.playlistName}
+          metadata={<p class={styles.tvSubtitle}>{trackCount(tracks().length)}</p>}
+        />
       </section>
 
       <Show
@@ -90,38 +95,20 @@ export function TvPlaylistDetail(props: TvPlaylistDetailProps) {
           items={tracks()}
           groupId="playlist-tracks"
           order={20}
-          maxVisible={16}
           renderRow={(track, index, tvId) => {
-            const playing = () => isPlayingTrack(track);
+            const playing = () => isPlayingTrack(track());
             return (
-              <Control
-                role="listitem"
-                data-tv-id={tvId}
-                data-tv-group="playlist-tracks"
-                data-tv-index={String(index)}
-                data-tv-focused={focus.activeId() === tvId ? 'true' : undefined}
-                class={styles.tvTrackRow}
-                classList={{
-                  [styles.tvFocusTarget]: true,
-                  [styles.tvTrackRowPlaying]: playing(),
-                }}
-                onClick={() => playAt(index)}
-              >
-                <TvArtwork
-                  class={styles.tvTrackArt}
-                  src={trackCoverUrl(track, 'thumb')}
-                  alt={track.title}
-                  fallbackLabel={track.title}
-                />
-                <div class={styles.tvTrackMain}>
-                  <span class={styles.tvTrackTitle}>{track.title}</span>
-                  <span class={styles.tvTrackSub}>{track.artist}</span>
-                </div>
-                <Show when={playing()}>
-                  <span class={styles.tvPlayingBadge}>{t('tv.player.playingNow')}</span>
-                </Show>
-                <span class={styles.tvTrackDuration}>{formatDuration(track.duration)}</span>
-              </Control>
+              <TvTrackRow
+                id={tvId()}
+                group="playlist-tracks"
+                index={index()}
+                title={track().title}
+                artist={track().artist}
+                artwork={trackCoverUrl(track(), 'thumb')}
+                duration={track().duration}
+                playing={playing()}
+                onActivate={() => playAt(index())}
+              />
             );
           }}
         />

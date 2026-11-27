@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, waitFor } from '@solidjs/testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mockScrollportLayout } from '../testLayout';
 import type { Track } from '../types/music';
 import { resetTvState, setDimActive } from './state';
 
@@ -183,6 +184,7 @@ describe('Smart TV screen journeys', () => {
     mockState.playback.index = 0;
 
     const interceptorRef: { current: ((action: TvAction) => boolean) | null } = { current: null };
+    mockScrollportLayout();
     const { getByRole, getByText, queryByText } = render(() => (
       <TvFocusProvider>
         <TvNowPlaying

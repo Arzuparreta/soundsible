@@ -3,12 +3,14 @@ import { Control, InputControl } from '../../design/Control';
 import { api } from '../../lib/api';
 import { playCatalogItem } from '../../lib/catalogItem';
 import { catalogTrack } from '../../lib/catalogTrack';
-import { formatDuration, trackCount } from '../../lib/format';
+import { trackCount } from '../../lib/format';
 import { t } from '../../lib/i18n';
+import { filterLocalCollection, normalizeLibraryQuery, searchLibrary } from '../../lib/librarySearch';
 import { trackCoverUrl } from '../../lib/media';
 import { actions, isPlayingItem, isPlayingTrack, musicLibrary, state } from '../../stores';
 import type { CatalogItem, Track } from '../../types/music';
-import { TvArtwork } from '../components/TvArtwork';
+import { TvCard } from '../components/TvCard';
+import { TvTrackRow } from '../components/TvTrackRow';
 import { TvVirtualList } from '../components/TvVirtualList';
 import { useTvFocus } from '../nav/spatial';
 import { albumTvHash, playlistTvHash } from '../nav/router';
@@ -47,18 +49,11 @@ export function TvSearch(props: TvSearchProps) {
   });
 
   function localSearchMatches(q: string) {
-    const needle = q.trim().toLowerCase();
-    const tracks = musicLibrary().filter(
-      (track) =>
-        track.title.toLowerCase().includes(needle) ||
-        track.artist.toLowerCase().includes(needle) ||
-        (track.album || '').toLowerCase().includes(needle),
-    );
-    const albums = deriveAlbumsFromTracks(musicLibrary()).filter(
-      (album) =>
-        album.title.toLowerCase().includes(needle) ||
-        (album.album_artist || '').toLowerCase().includes(needle),
-    );
+    const query = normalizeLibraryQuery(q);
+    const tracks = searchLibrary(musicLibrary(), [], q)
+      .flatMap(result => result.kind === 'track' ? [result.track] : []);
+    const albums = filterLocalCollection(deriveAlbumsFromTracks(musicLibrary()), query,
+      album => [album.title, album.album_artist]);
     const playlists = filterPlaylistsByQuery(state.playlists, q);
     return { tracks, albums, playlists };
   }
@@ -259,30 +254,19 @@ export function TvSearch(props: TvSearchProps) {
               {(album, idx) => {
                 const tvId = () => `search-local-album-${idx()}`;
                 return (
-                  <Control
-                    data-tv-id={tvId()}
-                    data-tv-group="search-albums"
-                    data-tv-index={String(idx())}
-                    data-tv-focused={focus.activeId() === tvId() ? 'true' : undefined}
-                    class={styles.tvCard}
-                    classList={{ [styles.tvFocusTarget]: true }}
-                    onClick={() =>
+                  <TvCard
+                    id={tvId()}
+                    group="search-albums"
+                    index={idx()}
+                    title={album.title}
+                    subtitle={album.album_artist || t('tv.library.unknownArtist')}
+                    artwork={albumCoverUrl(album)}
+                    onActivate={() =>
                       props.onNavigate(
                         albumTvHash({ id: album.id, name: album.title, artist: album.album_artist }),
                       )
                     }
-                  >
-                    <TvArtwork
-                      class={styles.tvCardArt}
-                      src={albumCoverUrl(album)}
-                      alt={album.title}
-                      fallbackLabel={album.title}
-                    />
-                    <span class={styles.tvCardTitle}>{album.title}</span>
-                    <span class={styles.tvCardMeta}>
-                      {album.album_artist || t('tv.library.unknownArtist')}
-                    </span>
-                  </Control>
+                  />
                 );
               }}
             </For>
@@ -297,14 +281,14 @@ export function TvSearch(props: TvSearchProps) {
                       ? String(item.external_ids.deezer)
                       : undefined;
                 return (
-                  <Control
-                    data-tv-id={tvId()}
-                    data-tv-group="search-albums"
-                    data-tv-index={String(overallIdx())}
-                    data-tv-focused={focus.activeId() === tvId() ? 'true' : undefined}
-                    class={styles.tvCard}
-                    classList={{ [styles.tvFocusTarget]: true }}
-                    onClick={() =>
+                  <TvCard
+                    id={tvId()}
+                    group="search-albums"
+                    index={overallIdx()}
+                    title={item.title}
+                    subtitle={item.artist || item.subtitle || t('tv.library.unknownArtist')}
+                    artwork={safeExternalCover(item.cover)}
+                    onActivate={() =>
                       props.onNavigate(
                         albumTvHash({
                           id: item.id,
@@ -314,18 +298,7 @@ export function TvSearch(props: TvSearchProps) {
                         }),
                       )
                     }
-                  >
-                    <TvArtwork
-                      class={styles.tvCardArt}
-                      src={safeExternalCover(item.cover)}
-                      alt={item.title}
-                      fallbackLabel={item.title}
-                    />
-                    <span class={styles.tvCardTitle}>{item.title}</span>
-                    <span class={styles.tvCardMeta}>
-                      {item.artist || item.subtitle || t('tv.library.unknownArtist')}
-                    </span>
-                  </Control>
+                  />
                 );
               }}
             </For>
@@ -375,59 +348,43 @@ export function TvSearch(props: TvSearchProps) {
             items={combinedTracks()}
             groupId="search-tracks"
             order={30}
-            maxVisible={16}
             renderRow={(row, index, tvId) => {
-              const title = () => (row.kind === 'local' ? row.track.title : row.item.title);
-              const artist = () =>
-                row.kind === 'local'
-                  ? row.track.artist
-                  : row.item.artist || row.item.subtitle || '';
-              const duration = () =>
-                row.kind === 'local' ? row.track.duration : row.item.duration;
-              const art = () =>
-                row.kind === 'local'
-                  ? trackCoverUrl(row.track, 'thumb')
-                  : row.resolved
-                    ? trackCoverUrl(row.resolved, 'thumb')
-                    : safeExternalCover(row.item.cover);
-              const playing = () =>
-                row.kind === 'local' ? isPlayingTrack(row.track) : isPlayingItem(row.item);
+              const display = createMemo(() => {
+                const value = row();
+                if (value.kind === 'local') {
+                  const track = value.track;
+                  return { title: track.title, artist: track.artist, duration: track.duration,
+                    artwork: trackCoverUrl(track, 'thumb'), playing: isPlayingTrack(track) };
+                }
+                const item = value.item;
+                return {
+                  title: item.title,
+                  artist: item.artist || item.subtitle || '',
+                  duration: item.duration,
+                  artwork: value.resolved ? trackCoverUrl(value.resolved, 'thumb') : safeExternalCover(item.cover),
+                  playing: isPlayingItem(value.item),
+                };
+              });
 
               return (
-                <Control
-                  role="listitem"
-                  data-tv-id={tvId}
-                  data-tv-group="search-tracks"
-                  data-tv-index={String(index)}
-                  data-tv-focused={focus.activeId() === tvId ? 'true' : undefined}
-                  class={styles.tvTrackRow}
-                  classList={{
-                    [styles.tvFocusTarget]: true,
-                    [styles.tvTrackRowPlaying]: playing(),
-                  }}
-                  onClick={() => {
-                    if (row.kind === 'local') {
-                      actions.playTrack(row.track);
+                <TvTrackRow
+                  id={tvId()}
+                  group="search-tracks"
+                  index={index()}
+                  title={display().title}
+                  artist={display().artist}
+                  artwork={display().artwork}
+                  duration={display().duration}
+                  playing={display().playing}
+                  onActivate={() => {
+                    const result = row();
+                    if (result.kind === 'local') {
+                      actions.playTrack(result.track);
                     } else {
-                      void playCatalogItem(row.item);
+                      void playCatalogItem(result.item);
                     }
                   }}
-                >
-                  <TvArtwork
-                    class={styles.tvTrackArt}
-                    src={art()}
-                    alt={title()}
-                    fallbackLabel={title()}
-                  />
-                  <div class={styles.tvTrackMain}>
-                    <span class={styles.tvTrackTitle}>{title()}</span>
-                    <span class={styles.tvTrackSub}>{artist()}</span>
-                  </div>
-                  <Show when={playing()}>
-                    <span class={styles.tvPlayingBadge}>{t('tv.player.playingNow')}</span>
-                  </Show>
-                  <span class={styles.tvTrackDuration}>{formatDuration(duration())}</span>
-                </Control>
+                />
               );
             }}
           />

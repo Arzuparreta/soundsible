@@ -8,6 +8,7 @@ import { downloadCounts } from '../stores';
 import { CloseIcon, MenuIcon } from './icons';
 import { navigationGroups, navigationItems, primaryDestination, type NavigationGroup } from './primaryNavigation';
 import styles from './NavigationMenu.module.css';
+import { NavigationItemContent } from './NavigationItemContent';
 
 const mainGroups = navigationGroups.filter((group) => !group.footer);
 const footerGroups = navigationGroups.filter((group) => group.footer);
@@ -56,8 +57,7 @@ function GroupSection(props: {
                   props.select(href, isCurrent());
                 }}
               >
-                <span class={styles.icon}>{item.icon()}</span>
-                <span class={styles.label} hidden={props.collapsed}>{item.label()}</span>
+                <NavigationItemContent icon={item.icon} label={item.label()} collapsed={props.collapsed} />
                 <Show when={hasDownloads()}>
                   <span
                     class={props.collapsed ? styles.badgeDot : styles.badge}

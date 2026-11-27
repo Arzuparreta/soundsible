@@ -1,3 +1,4 @@
+import { collectionIndex, resolveCollectionTracks } from '../lib/collectionIdentity';
 import { artworkUrl } from '../lib/config';
 import { coverUrl, trackCoverUrl } from '../lib/media';
 import { pickPlaylistCoverTrack } from '../lib/playlists';
@@ -7,28 +8,17 @@ export function buildTrackIndex(
   primary: readonly Track[],
   secondary: readonly Track[] = [],
 ): Map<string, Track> {
-  const map = new Map<string, Track>();
-  for (const track of secondary) {
-    if (track?.id) map.set(track.id, track);
-  }
-  for (const track of primary) {
-    if (track?.id) map.set(track.id, track);
-  }
-  return map;
+  const index = collectionIndex(secondary);
+  for (const [key, track] of collectionIndex(primary)) index.set(key, track);
+  return index;
 }
 
 export function resolvePlaylistTracks(
   playlistName: string,
   playlists: PlaylistMap,
-  musicTracks: readonly Track[],
-  rawLibrary: readonly Track[],
+  index: ReadonlyMap<string, Track>,
 ): Track[] {
-  const ids = playlists[playlistName] ?? [];
-  if (!ids.length) return [];
-  const index = buildTrackIndex(musicTracks, rawLibrary);
-  return ids
-    .map((id) => index.get(id))
-    .filter((track): track is Track => Boolean(track));
+  return resolveCollectionTracks(playlists[playlistName] ?? [], index);
 }
 
 export function playlistCoverUrl(
@@ -96,9 +86,7 @@ export function matchAlbumTracks(
 ): Track[] {
   const index = buildTrackIndex(tracks, fallbackLibrary);
   if (trackIds && trackIds.length > 0) {
-    const ordered = trackIds
-      .map((id) => index.get(id))
-      .filter((t): t is Track => Boolean(t));
+    const ordered = resolveCollectionTracks(trackIds, index);
     if (ordered.length > 0) return ordered;
   }
   const byId = album.id

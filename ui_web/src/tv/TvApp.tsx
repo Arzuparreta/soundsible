@@ -132,7 +132,7 @@ function TvShellInner(props: TvAppProps) {
     if (!restored) return false;
     queueMicrotask(() => {
       focus.restoreScrollState(restored.scrollTop, restored.shelfScrolls);
-      if (restored.focusedId && focus.focusById(restored.focusedId)) return;
+      if (restored.focusedId && focus.restoreFocus(restored.focusedId)) return;
       focus.reconcileFocus();
     });
     return true;
@@ -280,7 +280,9 @@ function TvShellInner(props: TvAppProps) {
   return (
     <div class={styles.tvRoot}>
       <div class={styles.tvLayout}>
-        <TvRail currentRoute={activeRoute} onSelect={handleRailSelect} />
+        <div class={styles.tvRailSlot}>
+          <TvRail currentRoute={activeRoute} onSelect={handleRailSelect} />
+        </div>
         <main class={styles.tvMain}>
           <div class={styles.tvScroll} data-tv-scroll-y="main">
             <Switch>

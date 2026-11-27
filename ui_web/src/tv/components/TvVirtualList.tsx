@@ -1,4 +1,5 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createMemo, createSignal, onCleanup, onMount, type Accessor, type JSX } from 'solid-js';
+import { CollectionRows } from '../../components/CollectionView';
 import { useTvFocus } from '../nav/spatial';
 import styles from '../styles/tv.module.css';
 
@@ -6,109 +7,78 @@ interface TvVirtualListProps<T> {
   items: readonly T[];
   groupId: string;
   order: number;
-  maxVisible?: number;
   initialIndex?: number;
+  itemKey?: (item: T) => string;
   railEdge?: boolean;
   insideModal?: boolean;
-  renderRow: (item: T, index: number, tvId: string) => JSX.Element;
+  renderRow: (item: Accessor<T>, index: Accessor<number>, tvId: Accessor<string>) => JSX.Element;
 }
 
-const DEFAULT_MAX_VISIBLE = 16;
+export function tvListItemId(groupId: string, key: string | number): string {
+  return `${groupId}-item-${key}`;
+}
 
 export function TvVirtualList<T>(props: TvVirtualListProps<T>) {
   const focus = useTvFocus();
-  const visibleCount = () => props.maxVisible ?? DEFAULT_MAX_VISIBLE;
-  const initialStart = Math.max(
-    0,
-    Math.min(
-      Math.max(0, props.items.length - visibleCount()),
-      (props.initialIndex ?? 0) - 2,
-    ),
-  );
-  const [windowStart, setWindowStart] = createSignal(initialStart);
+  const [pending, setPending] = createSignal<number | undefined>(props.initialIndex);
+  const [height, setHeight] = createSignal(102);
+  let group!: HTMLDivElement;
+  let sizeProbe!: HTMLDivElement;
+  let disposed = false;
+  const idAt = (index: number) => tvListItemId(props.groupId, props.itemKey?.(props.items[index]) ?? index);
+  const indexOf = (id: string | null) => {
+    const prefix = tvListItemId(props.groupId, '');
+    if (!id?.startsWith(prefix)) return -1;
+    if (props.itemKey) return props.items.findIndex((_, index) => idAt(index) === id);
+    const index = Number(id.slice(prefix.length));
+    return Number.isInteger(index) && index < props.items.length ? index : -1;
+  };
+  const pinned = createMemo(() => pending() ?? indexOf(focus.activeId()));
 
-  createEffect(() => {
-    const maxStart = Math.max(0, props.items.length - visibleCount());
-    if (windowStart() > maxStart) setWindowStart(maxStart);
-  });
-
-  const windowSlice = createMemo(() => {
-    const start = windowStart();
-    const end = Math.min(props.items.length, start + visibleCount());
-    return {
-      start,
-      end,
-      rows: props.items.slice(start, end),
-      remainingAfter: Math.max(0, props.items.length - end),
-    };
-  });
-
-  function ensureWindowContains(index: number): void {
-    const count = visibleCount();
-    const start = windowStart();
-    if (index < start) {
-      setWindowStart(Math.max(0, index));
-    } else if (index >= start + count) {
-      setWindowStart(Math.max(0, index - count + 1));
+  function focusIndex(index: number): boolean {
+    if (index < 0 || index >= props.items.length) return false;
+    const id = idAt(index);
+    if (focus.focusById(id, { rememberContent: !props.insideModal })) {
+      setPending(undefined);
+      return true;
     }
+    setPending(index);
+    // The shared range mounts the pinned row before focus and scroll are applied.
+    queueMicrotask(() => {
+      if (disposed || pending() !== index) return;
+      focus.focusById(id, { rememberContent: !props.insideModal });
+      setPending(undefined);
+    });
+    return true;
   }
 
   onMount(() => {
+    const syncHeight = () => { if (sizeProbe.offsetHeight) setHeight(sizeProbe.offsetHeight); };
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(syncHeight);
+    observer?.observe(sizeProbe);
+    syncHeight();
     const unregister = focus.registerVirtualGroup(props.groupId, {
-      onMove(currentIndex, direction) {
+      focusIndex,
+      focusId: id => focusIndex(indexOf(id)),
+      onMove(index, direction) {
         if (direction === 'left') {
-          if (props.railEdge !== false && !props.insideModal) {
-            return { handled: false, escape: 'left' };
-          }
-          return { handled: true };
+          return props.railEdge === false || props.insideModal ? { handled: true } : { handled: false, escape: 'left' };
         }
-        if (direction === 'right') {
-          return { handled: true };
-        }
-        if (direction === 'up') {
-          if (currentIndex <= 0) {
-            return { handled: false, escape: 'up' };
-          }
-          const next = currentIndex - 1;
-          ensureWindowContains(next);
-          queueMicrotask(() => {
-            focus.focusById(`${props.groupId}-item-${next}`, {
-              rememberContent: !props.insideModal,
-            });
-          });
-          return { handled: true };
-        }
-        if (direction === 'down') {
-          if (currentIndex >= props.items.length - 1) {
-            return { handled: false, escape: 'down' };
-          }
-          const next = currentIndex + 1;
-          ensureWindowContains(next);
-          queueMicrotask(() => {
-            focus.focusById(`${props.groupId}-item-${next}`, {
-              rememberContent: !props.insideModal,
-            });
-          });
-          return { handled: true };
-        }
-        return { handled: false };
-      },
-      focusIndex(index) {
-        const clamped = Math.max(0, Math.min(index, props.items.length - 1));
-        ensureWindowContains(clamped);
-        queueMicrotask(() => {
-          focus.focusById(`${props.groupId}-item-${clamped}`, {
-            rememberContent: !props.insideModal,
-          });
-        });
-        return true;
+        if (direction === 'right') return { handled: true };
+        const next = index + (direction === 'up' ? -1 : 1);
+        return focusIndex(next) ? { handled: true } : { handled: false, escape: direction };
       },
     });
-    onCleanup(unregister);
+    onCleanup(() => {
+      disposed = true;
+      unregister();
+      observer?.disconnect();
+    });
   });
 
   return (
     <div
+      ref={group}
       class={styles.tvTrackList}
       data-tv-group-container={props.groupId}
       data-tv-group-kind="list"
@@ -116,33 +86,17 @@ export function TvVirtualList<T>(props: TvVirtualListProps<T>) {
       data-tv-rail-edge={props.railEdge === false ? 'none' : undefined}
       role="list"
     >
-      <Show when={windowSlice().start > 0}>
-        <div
-          aria-hidden="true"
-          style={{
-            'flex-shrink': '0',
-            height: `calc((var(--tv-row-h) + var(--tv-gap-xs)) * ${windowSlice().start})`,
-          }}
-        />
-      </Show>
-      <div class={styles.tvVirtualViewport}>
-        <For each={windowSlice().rows}>
-          {(item, localIdx) => {
-            const logicalIdx = () => windowSlice().start + localIdx();
-            const tvId = () => `${props.groupId}-item-${logicalIdx()}`;
-            return props.renderRow(item, logicalIdx(), tvId());
-          }}
-        </For>
-      </div>
-      <Show when={windowSlice().remainingAfter > 0}>
-        <div
-          aria-hidden="true"
-          style={{
-            'flex-shrink': '0',
-            height: `calc((var(--tv-row-h) + var(--tv-gap-xs)) * ${windowSlice().remainingAfter})`,
-          }}
-        />
-      </Show>
+      <div ref={sizeProbe} class={styles.tvRowSize} aria-hidden="true" />
+      <CollectionRows
+        items={props.items}
+        itemKey={props.itemKey}
+        scrollElement={() => group.closest<HTMLElement>('[data-tv-scroll-y]')}
+        rowHeight={height()}
+        overscan={3}
+        keepMountedIndex={pinned()}
+      >
+        {(item, index) => props.renderRow(item, index, () => idAt(index()))}
+      </CollectionRows>
     </div>
   );
 }

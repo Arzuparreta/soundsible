@@ -3,6 +3,7 @@ import { fixtureWav, mockMusicEngine } from './music-browser-fixture';
 
 interface TrackSeed {
   id: string;
+  item_id?: string;
   title: string;
   artist: string;
   album?: string;
@@ -194,13 +195,15 @@ test('readability metrics, 5% safe margins, and responsive 1080p/720p scaling', 
     const btnRect = btn.getBoundingClientRect();
     return {
       fontPx: parseFloat(styleRoot.fontSize),
-      padLeftPx: parseFloat(mainStyle.paddingLeft),
+      leftPx: btnRect.left,
+      padRightPx: parseFloat(mainStyle.paddingRight),
       padTopPx: parseFloat(mainStyle.paddingTop),
       btnHeightPx: btnRect.height,
     };
   });
   expect(metrics1080.fontPx).toBeGreaterThanOrEqual(31);
-  expect(metrics1080.padLeftPx).toBeGreaterThanOrEqual(90);
+  expect(metrics1080.leftPx).toBeGreaterThanOrEqual(96);
+  expect(metrics1080.padRightPx).toBeGreaterThanOrEqual(96);
   expect(metrics1080.padTopPx).toBeGreaterThanOrEqual(50);
   expect(metrics1080.btnHeightPx).toBeGreaterThanOrEqual(63);
 
@@ -309,8 +312,17 @@ test('Home focuses Resume without autoplay, D-pad rail restore, held OK single f
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('[data-tv-id="home-recent-1"]')).toBeFocused();
   await page.keyboard.press('ArrowLeft');
+  const card = page.locator('[data-tv-id="home-recent-0"]');
+  const home = page.locator('[data-tv-id="rail-home"]');
+  const icon = home.locator('svg');
+  const cardLayout = () => card.evaluate(el => [el.offsetLeft, el.offsetTop, el.offsetWidth, el.offsetHeight]);
+  const cardBefore = await cardLayout();
+  const iconBefore = await icon.boundingBox();
   await page.keyboard.press('ArrowLeft');
-  await expect(page.locator('[data-tv-id="rail-home"]')).toBeFocused();
+  await expect(home).toBeFocused();
+  await expect(home.getByText('Home')).toBeVisible();
+  expect(await cardLayout()).toEqual(cardBefore);
+  expect(await icon.boundingBox()).toEqual(iconBefore);
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('[data-tv-id="home-recent-0"]')).toBeFocused();
 
@@ -352,6 +364,7 @@ test('long virtualized playlist stays bounded, Back restores focus & Search quer
 
   const bigTracks: TrackSeed[] = Array.from({ length: 240 }, (_, i) => ({
     id: `big-${i + 1}`,
+    item_id: `item-${i + 1}`,
     title: `Symphony Movement ${i + 1}`,
     artist: 'Orchestra',
     album: 'Mega Box Set',
@@ -361,7 +374,7 @@ test('long virtualized playlist stays bounded, Back restores focus & Search quer
 
   await setupTvSession(page, {
     tracks: bigTracks,
-    playlists: { 'Marathon Mix': bigTracks.map((t) => t.id) },
+    playlists: { 'Marathon Mix': bigTracks.map((track, index) => index % 2 ? track.id : track.item_id!) },
   });
 
   await page.route((u) => u.pathname === '/api/catalog/search', async (route) => {
@@ -389,7 +402,7 @@ test('long virtualized playlist stays bounded, Back restores focus & Search quer
   await page.keyboard.press('Enter');
 
   // Verify bounded rows stayed bounded after scrolling.
-  expect(await page.locator('[data-tv-group="playlist-tracks"]').count()).toBeLessThanOrEqual(24);
+  await expect.poll(() => page.locator('[data-tv-group="playlist-tracks"]').count()).toBeLessThanOrEqual(24);
 
   // Escape/Back returns to Home and restores focus on home-playlist-0.
   await page.keyboard.press('Escape');
@@ -417,7 +430,7 @@ test('long virtualized playlist stays bounded, Back restores focus & Search quer
   // Open Queue -> focus trapped around active item 18 -> select track 20 (item-19) by queueId without losing Now Playing.
   await page.locator('[data-tv-id="np-queue"]').click();
   await expect(page.getByRole('heading', { name: 'Up next' })).toBeVisible();
-  await page.locator('[data-tv-id="tv-queue-rows-item-19"]').click();
+  await page.locator('[data-tv-group="tv-queue-rows"][data-tv-index="19"]').click();
   await expect(page.getByRole('heading', { name: 'Up next' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Symphony Movement 20' })).toBeVisible();
 

@@ -1,14 +1,15 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { Control } from '../../design/Control';
 import { api } from '../../lib/api';
-import { formatDuration, trackCount } from '../../lib/format';
+import { trackCount } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { trackCoverUrl } from '../../lib/media';
 import { libraryContext } from '../../lib/playbackContext';
 import { playlistNames } from '../../lib/playlistOrder';
 import { actions, isPlayingTrack, musicLibrary, state } from '../../stores';
 import type { CatalogAlbum } from '../../types/music';
-import { TvArtwork } from '../components/TvArtwork';
+import { TvCard } from '../components/TvCard';
+import { TvTrackRow } from '../components/TvTrackRow';
 import { TvVirtualList } from '../components/TvVirtualList';
 import { useTvFocus } from '../nav/spatial';
 import { albumTvHash, playlistTvHash } from '../nav/router';
@@ -157,24 +158,15 @@ export function TvLibrary(props: TvLibraryProps) {
                 const tvId = () => `lib-playlist-${idx()}`;
                 const count = () => state.playlists[name]?.length ?? 0;
                 return (
-                  <Control
-                    data-tv-id={tvId()}
-                    data-tv-group="lib-playlists"
-                    data-tv-index={String(idx())}
-                    data-tv-focused={focus.activeId() === tvId() ? 'true' : undefined}
-                    class={styles.tvCard}
-                    classList={{ [styles.tvFocusTarget]: true }}
-                    onClick={() => props.onNavigate(playlistTvHash(name))}
-                  >
-                    <TvArtwork
-                      class={styles.tvCardArt}
-                      src={playlistCoverUrl(name, state.playlists, trackIndex(), state.librarySettings)}
-                      alt={name}
-                      fallbackLabel={name}
-                    />
-                    <span class={styles.tvCardTitle}>{name}</span>
-                    <span class={styles.tvCardMeta}>{trackCount(count())}</span>
-                  </Control>
+                  <TvCard
+                    id={tvId()}
+                    group="lib-playlists"
+                    index={idx()}
+                    title={name}
+                    subtitle={trackCount(count())}
+                    artwork={playlistCoverUrl(name, state.playlists, trackIndex(), state.librarySettings)}
+                    onActivate={() => props.onNavigate(playlistTvHash(name))}
+                  />
                 );
               }}
             </For>
@@ -197,30 +189,19 @@ export function TvLibrary(props: TvLibraryProps) {
               {(album, idx) => {
                 const tvId = () => `lib-album-${idx()}`;
                 return (
-                  <Control
-                    data-tv-id={tvId()}
-                    data-tv-group="lib-albums"
-                    data-tv-index={String(idx())}
-                    data-tv-focused={focus.activeId() === tvId() ? 'true' : undefined}
-                    class={styles.tvCard}
-                    classList={{ [styles.tvFocusTarget]: true }}
-                    onClick={() =>
+                  <TvCard
+                    id={tvId()}
+                    group="lib-albums"
+                    index={idx()}
+                    title={album.title}
+                    subtitle={album.album_artist || t('tv.library.unknownArtist')}
+                    artwork={albumCoverUrl(album)}
+                    onActivate={() =>
                       props.onNavigate(
                         albumTvHash({ id: album.id, name: album.title, artist: album.album_artist }),
                       )
                     }
-                  >
-                    <TvArtwork
-                      class={styles.tvCardArt}
-                      src={albumCoverUrl(album)}
-                      alt={album.title}
-                      fallbackLabel={album.title}
-                    />
-                    <span class={styles.tvCardTitle}>{album.title}</span>
-                    <span class={styles.tvCardMeta}>
-                      {album.album_artist || t('tv.library.unknownArtist')}
-                    </span>
-                  </Control>
+                  />
                 );
               }}
             </For>
@@ -258,42 +239,24 @@ export function TvLibrary(props: TvLibraryProps) {
             items={songs()}
             groupId="lib-songs"
             order={20}
-            maxVisible={16}
             renderRow={(track, index, tvId) => {
-              const playing = () => isPlayingTrack(track);
+              const playing = () => isPlayingTrack(track());
               return (
-                <Control
-                  role="listitem"
-                  data-tv-id={tvId}
-                  data-tv-group="lib-songs"
-                  data-tv-index={String(index)}
-                  data-tv-focused={focus.activeId() === tvId ? 'true' : undefined}
-                  class={styles.tvTrackRow}
-                  classList={{
-                    [styles.tvFocusTarget]: true,
-                    [styles.tvTrackRowPlaying]: playing(),
-                  }}
-                  onClick={() =>
-                    actions.playFrom(songs(), index, {
+                <TvTrackRow
+                  id={tvId()}
+                  group="lib-songs"
+                  index={index()}
+                  title={track().title}
+                  artist={track().artist}
+                  artwork={trackCoverUrl(track(), 'thumb')}
+                  duration={track().duration}
+                  playing={playing()}
+                  onActivate={() =>
+                    actions.playFrom(songs(), index(), {
                       context: libraryContext(t('tv.library.songsTab')),
                     })
                   }
-                >
-                  <TvArtwork
-                    class={styles.tvTrackArt}
-                    src={trackCoverUrl(track, 'thumb')}
-                    alt={track.title}
-                    fallbackLabel={track.title}
-                  />
-                  <div class={styles.tvTrackMain}>
-                    <span class={styles.tvTrackTitle}>{track.title}</span>
-                    <span class={styles.tvTrackSub}>{track.artist}</span>
-                  </div>
-                  <Show when={playing()}>
-                    <span class={styles.tvPlayingBadge}>{t('tv.player.playingNow')}</span>
-                  </Show>
-                  <span class={styles.tvTrackDuration}>{formatDuration(track.duration)}</span>
-                </Control>
+                />
               );
             }}
           />

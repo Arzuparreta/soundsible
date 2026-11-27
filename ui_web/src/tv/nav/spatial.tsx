@@ -20,6 +20,7 @@ export interface VirtualGroupMoveResult {
 export interface VirtualGroupHandler {
   onMove: (currentIndex: number, direction: TvNavDirection) => VirtualGroupMoveResult | boolean;
   focusIndex?: (index: number) => boolean;
+  focusId?: (id: string) => boolean;
 }
 
 export interface ModalEntry {
@@ -37,6 +38,7 @@ export interface TvFocusContextValue {
   inRail: () => boolean;
   pointerMode: () => boolean;
   focusById: (id: string, opts?: { rememberContent?: boolean }) => boolean;
+  restoreFocus: (id: string) => boolean;
   focusFirstInContent: (preferredId?: string | null) => boolean;
   focusRail: (preferredId?: string | null) => boolean;
   exitRail: () => boolean;
@@ -230,6 +232,17 @@ export function TvFocusProvider(props: ParentProps) {
     return focusElement(findElementById(id), opts);
   }
 
+  function restoreFocus(id: string): boolean {
+    if (focusById(id)) return true;
+    const root = scopeRoot();
+    for (const [groupId, handler] of virtualGroups) {
+      if (!id.startsWith(`${groupId}-item-`)) continue;
+      const group = root.querySelector(`[data-tv-group-container="${CSS.escape(groupId)}"]`);
+      if (group && handler.focusId?.(id)) return true;
+    }
+    return false;
+  }
+
   function inRail(): boolean {
     const id = activeId();
     if (!id) return false;
@@ -250,7 +263,7 @@ export function TvFocusProvider(props: ParentProps) {
   }
 
   function focusFirstInContent(preferredId?: string | null): boolean {
-    if (preferredId && focusById(preferredId)) return true;
+    if (preferredId && restoreFocus(preferredId)) return true;
     const groups = queryContentGroups(false);
     for (const group of groups) {
       const items = queryFocusable(group);
@@ -263,7 +276,7 @@ export function TvFocusProvider(props: ParentProps) {
   function exitRail(): boolean {
     if (topModal()) return false;
     const lastId = lastContentId();
-    if (lastId && focusById(lastId)) return true;
+    if (lastId && restoreFocus(lastId)) return true;
     return focusFirstInContent();
   }
 
@@ -464,7 +477,8 @@ export function TvFocusProvider(props: ParentProps) {
       if (container) {
         const items = queryFocusable(container);
         if (items.length > 0) {
-          const sibling = items[Math.min(lastSnapshot.index, items.length - 1)];
+          const distance = (item: HTMLElement) => Math.abs(Number(item.dataset.tvIndex ?? 0) - lastSnapshot.index);
+          const sibling = items.reduce((best, item) => distance(item) < distance(best) ? item : best);
           return focusElement(sibling);
         }
       }
@@ -477,7 +491,7 @@ export function TvFocusProvider(props: ParentProps) {
     const openerId = untrack(activeId);
     setModalStack((prev) => [...prev.filter((m) => m.id !== modalId), { id: modalId, openerId }]);
     queueMicrotask(() => {
-      if (initialFocusId && focusById(initialFocusId, { rememberContent: false })) return;
+      if (initialFocusId && restoreFocus(initialFocusId)) return;
       const modalRoot = document.querySelector<HTMLElement>(`[data-tv-modal="${CSS.escape(modalId)}"]`);
       if (modalRoot) {
         const items = queryFocusable(modalRoot);
@@ -497,7 +511,7 @@ export function TvFocusProvider(props: ParentProps) {
         reconcileFocus();
         return;
       }
-      if (removed?.openerId && focusById(removed.openerId)) return;
+      if (removed?.openerId && restoreFocus(removed.openerId)) return;
       reconcileFocus();
     });
   }
@@ -592,6 +606,7 @@ export function TvFocusProvider(props: ParentProps) {
     inRail,
     pointerMode,
     focusById,
+    restoreFocus,
     focusFirstInContent,
     focusRail,
     exitRail,

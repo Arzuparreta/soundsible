@@ -890,7 +890,7 @@
   --tv-card-w: calc(280 * var(--tv-u));
   --tv-card-art: calc(244 * var(--tv-u));
   --tv-hero-art: calc(220 * var(--tv-u));
-  --tv-row-h: calc(88 * var(--tv-u));
+  --tv-row-h: calc(90 * var(--tv-u));
   --tv-row-art: calc(64 * var(--tv-u));
   --tv-now-art: calc(380 * var(--tv-u));
   --tv-qr-size: calc(280 * var(--tv-u));
@@ -898,7 +898,7 @@
   --tv-max-form-w: calc(920 * var(--tv-u));
   --tv-modal-w: calc(880 * var(--tv-u));
 
-  --tv-bg: #0b0c10;
+  --tv-bg: var(--stage-base);
   --tv-surface: #151720;
   --tv-surface-raised: #1e212d;
   --tv-surface-focus: #2a2f40;
@@ -907,11 +907,11 @@
   --tv-scrim: rgba(7, 8, 12, 0.88);
   --tv-dim-bg: #040406;
 
-  --tv-ink: #f6f7fa;
-  --tv-ink-muted: #b8bcc9;
+  --tv-ink: var(--ink-primary);
+  --tv-ink-muted: var(--ink-secondary);
   --tv-ink-subtle: #8b90a0;
-  --tv-accent: #f97a12;
-  --tv-accent-ink: #ff9c47;
+  --tv-accent: var(--accent);
+  --tv-accent-ink: var(--accent-ink);
   --tv-on-accent: #170c02;
   --tv-danger: #ff5b52;
   --tv-success: #38d162;

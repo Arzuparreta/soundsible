@@ -33,6 +33,20 @@ Add a SolidJS entry under `ui_web/src/tv/`. Its responsibilities are the TV shel
 4. Target the LG browser first. Start by probing a webOS 24-class Chromium 108 engine and a current set. Select the oldest supported model from real results. Check emitted JS, CSS, cookies, storage, Web Audio, media codecs, streaming/seek and socket reconnection on LAN HTTP and on the station's HTTPS origin. If lowering the compilation target becomes necessary, measure a TV-specific build before changing the desktop target. A small static boot message should survive failure to parse the app.
 5. A later LG hosted launcher can save the station URL and load the same interface. Compare it on-device with a packaged client if origin restrictions, remote events, session persistence or store rules block that route. Samsung Tizen needs its own input/lifecycle adapter and qualification. Android/Fire TV native shells merit a separate decision where browser availability or background audio is inadequate. Casting is a complementary phone-driven entry. It cannot satisfy the independent browse-and-play journey.
 
+### Shared web UI
+
+The current delivery is the station's browser entry at `/tv/`. Measure the
+oldest usable browser by testing that URL on real hardware. Store publishing
+and launchers are separate future work.
+
+The TV rail shares the web navigation item content, SVGs and selected style.
+It reserves a fixed collapsed column and opens over the content on D-pad focus.
+The shell owns direction handling, modal scope, route Back and scroll restore.
+Cards and track rows use shared artwork. Collection headings, playlist identity
+and local search reuse the web implementations. TV list navigation adapts
+`CollectionRows` by pinning a requested row until it mounts, then moving DOM
+focus. The queue identifies each row by its playback occurrence.
+
 ## Sign-in and account boundaries
 
 The current signed-in display creates a code and the **claiming device** gets the session cookie in `shared/api/routes/pairing.py`. Reuse that today by letting the user display a code on an authorized device and enter it on the TV with the pairing sheet open. Preserve existing station login and trusted-network rules. Acknowledge expiry, allow retry, and retain the selected station. Confirm the existing route's account and permission requirements on a non-admin account before enabling this option.

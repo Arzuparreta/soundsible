@@ -23,34 +23,51 @@
   min-height: 0;
 }
 
-.tvRail {
+.tvRailSlot {
   flex: none;
-  width: var(--tv-rail-collapsed-w);
+  width: calc(var(--tv-safe-x) + var(--tv-rail-collapsed-w));
+}
+
+.tvRail {
+  --icon-md: calc(32 * var(--tv-u));
+  --sidebar-icon-ink: var(--tv-ink-muted);
+  --sidebar-active: var(--tv-surface-selected);
+  --sidebar-active-border: var(--tv-border-strong);
+  --sidebar-hover: var(--tv-surface-focus);
+  position: absolute;
+  inset: 0 auto 0 0;
+  box-sizing: border-box;
+  width: calc(var(--tv-safe-x) + var(--tv-rail-collapsed-w));
   display: flex;
   flex-direction: column;
   gap: var(--tv-gap-sm);
-  padding: var(--tv-safe-y) var(--tv-gap-sm);
+  padding: var(--tv-safe-y) var(--tv-gap-sm) var(--tv-safe-y) calc(var(--tv-safe-x) + var(--tv-gap-sm));
   background: var(--tv-surface);
   border-right: 1px solid var(--tv-border);
-  transition: width var(--tv-dur-focus) ease;
   z-index: 10;
 }
 
 .tvRailExpanded {
-  width: var(--tv-rail-w);
+  width: min(calc(var(--tv-safe-x) + var(--tv-rail-w)), 50vw);
+  box-shadow: var(--tv-card-shadow);
 }
 
 .tvBrand {
   display: flex;
   align-items: center;
-  gap: var(--tv-gap-xs);
+  gap: var(--tv-gap-sm);
   min-height: var(--tv-control-min-h);
-  padding: 0 var(--tv-gap-xs);
+  padding: 0 calc(17 * var(--tv-u));
   font-size: var(--tv-font-sub);
   font-weight: var(--fw-bold);
-  color: var(--tv-accent-ink);
+  color: var(--tv-ink);
   white-space: nowrap;
-  overflow: hidden;
+}
+
+.tvBrand img {
+  flex: none;
+  width: var(--icon-md);
+  height: var(--icon-md);
 }
 
 .tvRailList {
@@ -59,30 +76,32 @@
   gap: var(--tv-gap-xs);
 }
 
-.tvRailItem {
-  display: flex;
-  align-items: center;
-  gap: var(--tv-gap-sm);
-  min-height: var(--tv-control-min-h);
+.tvRail .tvRailItem {
   width: 100%;
-  padding: var(--tv-gap-xs) var(--tv-gap-sm);
-  border-radius: var(--tv-radius-sm);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--tv-ink-muted);
+  min-height: var(--tv-control-min-h);
+  padding: var(--tv-gap-xs) calc(16 * var(--tv-u));
+  gap: var(--tv-gap-sm);
   font-size: var(--tv-font-sub);
-  font-weight: var(--fw-medium);
+  appearance: none;
   text-align: left;
-  cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
+  cursor: pointer;
 }
 
-.tvRailItemSelected {
-  background: var(--tv-surface-selected);
-  border-color: var(--tv-border-strong);
-  color: var(--tv-ink);
-  font-weight: var(--fw-semibold);
+.tvRail .tvRailItem:not([aria-current]):not(:hover):not(:focus) {
+  background: transparent;
+}
+
+.tvRailItem > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tvRail .tvRailItem:focus,
+.tvRail .tvRailItem[data-tv-focused='true'] {
+  background: var(--tv-surface-focus);
+  box-shadow: var(--tv-focus-ring-shadow);
+  transform: none;
 }
 
 .tvMain {
@@ -98,7 +117,7 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--tv-safe-y) var(--tv-safe-x);
+  padding: var(--tv-safe-y) var(--tv-safe-x) var(--tv-safe-y) var(--tv-gap-md);
   display: flex;
   flex-direction: column;
   gap: var(--tv-gap-lg);
@@ -189,6 +208,13 @@
   font-size: var(--tv-font-sub);
   font-weight: var(--fw-semibold);
   cursor: pointer;
+}
+
+.tvPrimaryBtn > svg,
+.tvSecondaryBtn > svg {
+  flex: none;
+  width: calc(28 * var(--tv-u));
+  height: calc(28 * var(--tv-u));
 }
 
 .tvPrimaryBtn {
@@ -295,11 +321,6 @@
   cursor: pointer;
 }
 
-.tvCardPlaying {
-  background: var(--tv-surface-playing);
-  border-color: var(--tv-accent);
-}
-
 .tvCardArt {
   width: var(--tv-card-art);
   height: var(--tv-card-art);
@@ -325,11 +346,17 @@
   white-space: nowrap;
 }
 
-.tvArtImg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.tvRowGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tv-gap-sm);
+}
+
+.tvGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tv-card-w), 1fr));
+  gap: var(--tv-gap-md);
+  padding: var(--tv-gap-xs);
 }
 
 .tvArtFallback {
@@ -344,20 +371,8 @@
   font-weight: var(--fw-bold);
 }
 
-.tvRowGroup {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--tv-gap-sm);
-}
-
-.tvGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--tv-card-w), 1fr));
-  gap: var(--tv-gap-md);
-  padding: var(--tv-gap-xs);
-}
-
 .tvTrackList {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: var(--tv-gap-xs);
@@ -689,8 +704,9 @@
   box-shadow: var(--tv-card-shadow);
 }
 
-.tvVirtualViewport {
-  display: flex;
-  flex-direction: column;
-  gap: var(--tv-gap-xs);
+.tvRowSize {
+  position: absolute;
+  width: 0;
+  height: calc(var(--tv-row-h) + var(--tv-gap-xs));
+  pointer-events: none;
 }

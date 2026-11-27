@@ -1,15 +1,18 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
+import { BackIcon, PlayFilledIcon } from '../../components/icons';
+import { EntityIdentity } from '../../design/EntityIdentity';
 import { Control } from '../../design/Control';
 import { api } from '../../lib/api';
 import { playCatalogItem } from '../../lib/catalogItem';
 import { catalogTrack } from '../../lib/catalogTrack';
-import { formatDuration, trackCount } from '../../lib/format';
+import { trackCount } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { coverUrl, trackCoverUrl } from '../../lib/media';
 import type { PlaybackContextDescriptor } from '../../lib/playbackQueue';
 import { actions, isPlayingTrack, musicLibrary, state } from '../../stores';
 import type { CatalogAlbum, CatalogItem, Track } from '../../types/music';
 import { TvArtwork } from '../components/TvArtwork';
+import { TvTrackRow } from '../components/TvTrackRow';
 import { TvVirtualList } from '../components/TvVirtualList';
 import { useTvFocus } from '../nav/spatial';
 import { matchAlbumTracks, safeExternalCover } from '../tvLibraryHelpers';
@@ -161,7 +164,7 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
           classList={{ [styles.tvFocusTarget]: true }}
           onClick={props.onBack}
         >
-          ← {t('tv.back')}
+          <BackIcon /> {t('tv.back')}
         </Control>
         <Show when={rows().length > 0}>
           <Control
@@ -173,7 +176,7 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
             classList={{ [styles.tvFocusTarget]: true }}
             onClick={() => playAt(0)}
           >
-            ▶ {t('tv.library.playAll')}
+            <PlayFilledIcon /> {t('tv.library.playAll')}
           </Control>
         </Show>
       </div>
@@ -185,12 +188,14 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
           alt={displayTitle()}
           fallbackLabel={displayTitle()}
         />
-        <div class={styles.tvDetailInfo}>
-          <h1 class={styles.tvHeroTitle}>{displayTitle()}</h1>
-          <p class={styles.tvSubtitle}>
+        <EntityIdentity
+          class={styles.tvDetailInfo}
+          headingClass={styles.tvHeroTitle}
+          title={displayTitle()}
+          metadata={<p class={styles.tvSubtitle}>
             {displayArtist()} · {trackCount(rows().length)}
-          </p>
-        </div>
+          </p>}
+        />
       </section>
 
       <Show when={loading()}>
@@ -224,56 +229,36 @@ export function TvAlbumDetail(props: TvAlbumDetailProps) {
           items={rows()}
           groupId="album-tracks"
           order={20}
-          maxVisible={16}
           renderRow={(entry, index, tvId) => {
-            const title = () =>
-              entry.kind === 'local' ? entry.track.title : entry.item.title;
-            const artist = () =>
-              entry.kind === 'local'
-                ? entry.track.artist
-                : entry.item.artist || entry.item.subtitle || displayArtist();
-            const duration = () =>
-              entry.kind === 'local' ? entry.track.duration : entry.item.duration;
-            const art = () =>
-              entry.kind === 'local'
-                ? trackCoverUrl(entry.track, 'thumb')
-                : entry.resolved
-                  ? trackCoverUrl(entry.resolved, 'thumb')
-                  : safeExternalCover(entry.item.cover);
-            const playing = () =>
-              entry.kind === 'local'
-                ? isPlayingTrack(entry.track)
-                : Boolean(entry.resolved && isPlayingTrack(entry.resolved));
+            const display = createMemo(() => {
+              const value = entry();
+              if (value.kind === 'local') {
+                const track = value.track;
+                return { title: track.title, artist: track.artist, duration: track.duration,
+                  artwork: trackCoverUrl(track, 'thumb'), playing: isPlayingTrack(track) };
+              }
+              const item = value.item;
+              return {
+                title: item.title,
+                artist: item.artist || item.subtitle || displayArtist(),
+                duration: item.duration,
+                artwork: value.resolved ? trackCoverUrl(value.resolved, 'thumb') : safeExternalCover(item.cover),
+                playing: Boolean(value.resolved && isPlayingTrack(value.resolved)),
+              };
+            });
 
             return (
-              <Control
-                role="listitem"
-                data-tv-id={tvId}
-                data-tv-group="album-tracks"
-                data-tv-index={String(index)}
-                data-tv-focused={focus.activeId() === tvId ? 'true' : undefined}
-                class={styles.tvTrackRow}
-                classList={{
-                  [styles.tvFocusTarget]: true,
-                  [styles.tvTrackRowPlaying]: playing(),
-                }}
-                onClick={() => playAt(index)}
-              >
-                <TvArtwork
-                  class={styles.tvTrackArt}
-                  src={art()}
-                  alt={title()}
-                  fallbackLabel={title()}
-                />
-                <div class={styles.tvTrackMain}>
-                  <span class={styles.tvTrackTitle}>{title()}</span>
-                  <span class={styles.tvTrackSub}>{artist()}</span>
-                </div>
-                <Show when={playing()}>
-                  <span class={styles.tvPlayingBadge}>{t('tv.player.playingNow')}</span>
-                </Show>
-                <span class={styles.tvTrackDuration}>{formatDuration(duration())}</span>
-              </Control>
+              <TvTrackRow
+                id={tvId()}
+                group="album-tracks"
+                index={index()}
+                title={display().title}
+                artist={display().artist}
+                artwork={display().artwork}
+                duration={display().duration}
+                playing={display().playing}
+                onActivate={() => playAt(index())}
+              />
             );
           }}
         />

@@ -1,4 +1,5 @@
 import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { NextFilledIcon, PauseFilledIcon, PlayFilledIcon, PrevFilledIcon, QueueListIcon } from '../../components/icons';
 import { Control } from '../../design/Control';
 import { clockTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
@@ -212,7 +213,7 @@ export function TvNowPlaying(props: TvNowPlayingProps) {
               classList={{ [styles.tvFocusTarget]: true }}
               onClick={() => actions.prev()}
             >
-              ⏮ {t('tv.previous')}
+              <PrevFilledIcon /> {t('tv.previous')}
             </Control>
             <Control
               data-tv-id="np-toggle"
@@ -223,7 +224,8 @@ export function TvNowPlaying(props: TvNowPlayingProps) {
               classList={{ [styles.tvFocusTarget]: true }}
               onClick={() => actions.togglePlay()}
             >
-              {state.playback.isPlaying ? `⏸ ${t('tv.pause')}` : `▶ ${t('tv.play')}`}
+              {state.playback.isPlaying ? <PauseFilledIcon /> : <PlayFilledIcon />}
+              {state.playback.isPlaying ? t('tv.pause') : t('tv.play')}
             </Control>
             <Control
               data-tv-id="np-next"
@@ -234,7 +236,7 @@ export function TvNowPlaying(props: TvNowPlayingProps) {
               classList={{ [styles.tvFocusTarget]: true }}
               onClick={() => actions.next()}
             >
-              ⏭ {t('tv.next')}
+              <NextFilledIcon /> {t('tv.next')}
             </Control>
             <Control
               data-tv-id="np-queue"
@@ -245,7 +247,7 @@ export function TvNowPlaying(props: TvNowPlayingProps) {
               classList={{ [styles.tvFocusTarget]: true }}
               onClick={() => setQueueOpen(true)}
             >
-              ☰ {t('tv.queue')} ({state.playback.queue.length})
+              <QueueListIcon /> {t('tv.queue')} ({state.playback.queue.length})
             </Control>
             <Control
               data-tv-id="np-dim"

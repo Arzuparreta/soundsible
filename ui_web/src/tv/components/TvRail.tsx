@@ -1,4 +1,7 @@
-import { For, Show } from 'solid-js';
+import { For, type JSX } from 'solid-js';
+import { ArtistIcon, HomeIcon, NavigationSearchIcon, PlaylistIcon, QueueListIcon } from '../../components/icons';
+import { NavigationItemContent } from '../../components/NavigationItemContent';
+import navStyles from '../../components/NavigationMenu.module.css';
 import { Control } from '../../design/Control';
 import { t } from '../../lib/i18n';
 import { resumeState, state } from '../../stores';
@@ -16,38 +19,21 @@ interface RailDestination {
   routeName: TvRoute['name'];
   hash: string;
   label: () => string;
-  glyph: string;
+  icon: () => JSX.Element;
 }
+
+const destinations: readonly RailDestination[] = [
+  { id: 'rail-home', routeName: 'home', hash: '#/home', label: () => t('tv.nav.home'), icon: HomeIcon },
+  { id: 'rail-search', routeName: 'search', hash: '#/search', label: () => t('tv.nav.search'), icon: NavigationSearchIcon },
+  { id: 'rail-library', routeName: 'library', hash: '#/library', label: () => t('tv.nav.library'), icon: () => <PlaylistIcon /> },
+  { id: 'rail-now-playing', routeName: 'now-playing', hash: '#/now-playing', label: () => t('tv.nav.nowPlaying'), icon: () => <QueueListIcon /> },
+  { id: 'rail-account', routeName: 'account', hash: '#/account', label: () => t('tv.nav.account'), icon: () => <ArtistIcon /> },
+];
 
 export function TvRail(props: TvRailProps) {
   const focus = useTvFocus();
-
   const hasSession = () => Boolean(state.playback.currentTrack || resumeState());
-
-  const items = (): RailDestination[] => {
-    const base: RailDestination[] = [
-      { id: 'rail-home', routeName: 'home', hash: '#/home', label: () => t('tv.nav.home'), glyph: '⌂' },
-      { id: 'rail-search', routeName: 'search', hash: '#/search', label: () => t('tv.nav.search'), glyph: '⌕' },
-      { id: 'rail-library', routeName: 'library', hash: '#/library', label: () => t('tv.nav.library'), glyph: '☷' },
-    ];
-    if (hasSession()) {
-      base.push({
-        id: 'rail-now-playing',
-        routeName: 'now-playing',
-        hash: '#/now-playing',
-        label: () => t('tv.nav.nowPlaying'),
-        glyph: '♪',
-      });
-    }
-    base.push({
-      id: 'rail-account',
-      routeName: 'account',
-      hash: '#/account',
-      label: () => t('tv.nav.account'),
-      glyph: '☺',
-    });
-    return base;
-  };
+  const items = () => destinations.filter(item => item.routeName !== 'now-playing' || hasSession());
 
   return (
     <aside
@@ -56,10 +42,8 @@ export function TvRail(props: TvRailProps) {
       aria-label={t('tv.title')}
     >
       <div class={styles.tvBrand} aria-hidden="true">
-        <span>S</span>
-        <Show when={focus.inRail()}>
-          <span>{t('tv.title')}</span>
-        </Show>
+        <img src={`${import.meta.env.BASE_URL}icons/icon-192.png`} alt="" />
+        <span hidden={!focus.inRail()}>soundsible</span>
       </div>
       <nav
         class={styles.tvRailList}
@@ -80,17 +64,14 @@ export function TvRail(props: TvRailProps) {
                 data-tv-focused={isFocused() ? 'true' : undefined}
                 aria-current={isSelected() ? 'page' : undefined}
                 aria-label={item.label()}
-                class={styles.tvRailItem}
+                class={`${navStyles.item} ${styles.tvRailItem}`}
                 classList={{
                   [styles.tvFocusTarget]: true,
-                  [styles.tvRailItemSelected]: isSelected(),
+                  [navStyles.active]: isSelected(),
                 }}
                 onClick={() => props.onSelect(item.hash)}
               >
-                <span aria-hidden="true">{item.glyph}</span>
-                <Show when={focus.inRail()}>
-                  <span>{item.label()}</span>
-                </Show>
+                <NavigationItemContent icon={item.icon} label={item.label()} collapsed={!focus.inRail()} />
               </Control>
             );
           }}

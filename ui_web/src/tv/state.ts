@@ -1,4 +1,5 @@
 import { createSignal } from 'solid-js';
+import { filterLocalCollection, normalizeLibraryQuery } from '../lib/librarySearch';
 import type { CatalogAlbum, CatalogItem, PlaylistMap, Track } from '../types/music';
 
 export type TvLibraryTab = 'playlists' | 'albums' | 'songs';
@@ -66,9 +67,9 @@ export function resetTvState(): void {
 }
 
 export function filterPlaylistsByQuery(playlists: PlaylistMap, query: string): string[] {
-  const q = query.trim().toLowerCase();
+  const q = normalizeLibraryQuery(query);
   if (!q) return [];
-  return Object.keys(playlists).filter((name) => name.toLowerCase().includes(q));
+  return filterLocalCollection(Object.keys(playlists), q, name => [name]);
 }
 
 export {

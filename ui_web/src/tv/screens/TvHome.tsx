@@ -8,6 +8,7 @@ import { playlistNames } from '../../lib/playlistOrder';
 import { requiresLogin, user } from '../../lib/session';
 import { actions, musicLibrary, resumeState, state } from '../../stores';
 import type { CatalogAlbum } from '../../types/music';
+import { TvCard } from '../components/TvCard';
 import { TvArtwork } from '../components/TvArtwork';
 import { useTvFocus } from '../nav/spatial';
 import { albumTvHash, playlistTvHash } from '../nav/router';
@@ -32,9 +33,6 @@ export function TvHome(props: TvHomeProps) {
   const trackIndex = createMemo(() => buildTrackIndex(musicLibrary(), state.library));
   const fallbackAlbums = createMemo(() => deriveAlbumsFromTracks(musicLibrary()));
 
-  const shownRecentAlbums = createMemo(() =>
-    recentAlbums().length > 0 ? recentAlbums() : fallbackAlbums().slice(0, 12),
-  );
   const shownLibraryAlbums = createMemo(() =>
     newestAlbums().length > 0 ? newestAlbums() : fallbackAlbums().slice(0, 16),
   );
@@ -50,7 +48,7 @@ export function TvHome(props: TvHomeProps) {
     !resumableTrack() &&
     musicLibrary().length === 0 &&
     savedPlaylistNames().length === 0 &&
-    shownRecentAlbums().length === 0 &&
+    recentAlbums().length === 0 &&
     shownLibraryAlbums().length === 0;
 
   let initialFocusApplied = false;
@@ -84,7 +82,7 @@ export function TvHome(props: TvHomeProps) {
       return;
     }
     const candidates = [
-      shownRecentAlbums().length > 0 ? 'home-recent-0' : null,
+      recentAlbums().length > 0 ? 'home-recent-0' : null,
       savedPlaylistNames().length > 0 ? 'home-playlist-0' : null,
       shownLibraryAlbums().length > 0 ? 'home-album-0' : null,
       isEmptyLibrary() ? 'home-empty-search' : null,
@@ -243,7 +241,7 @@ export function TvHome(props: TvHomeProps) {
         </section>
       </Show>
 
-      <Show when={shownRecentAlbums().length > 0}>
+      <Show when={recentAlbums().length > 0}>
         <section class={styles.tvShelfSection} aria-labelledby="home-recent-title">
           <h2 id="home-recent-title" class={styles.tvSectionTitle}>{t('tv.home.recent')}</h2>
           <div
@@ -253,34 +251,23 @@ export function TvHome(props: TvHomeProps) {
             data-tv-group-kind="shelf"
             data-tv-group-order="20"
           >
-            <For each={shownRecentAlbums()}>
+            <For each={recentAlbums()}>
               {(album, idx) => {
                 const tvId = () => `home-recent-${idx()}`;
                 return (
-                  <Control
-                    data-tv-id={tvId()}
-                    data-tv-group="home-recent"
-                    data-tv-index={String(idx())}
-                    data-tv-focused={focus.activeId() === tvId() ? 'true' : undefined}
-                    class={styles.tvCard}
-                    classList={{ [styles.tvFocusTarget]: true }}
-                    onClick={() =>
+                  <TvCard
+                    id={tvId()}
+                    group="home-recent"
+                    index={idx()}
+                    title={album.title}
+                    subtitle={album.album_artist || t('tv.library.unknownArtist')}
+                    artwork={albumCoverUrl(album)}
+                    onActivate={() =>
                       props.onNavigate(
                         albumTvHash({ id: album.id, name: album.title, artist: album.album_artist }),
                       )
                     }
-                  >
-                    <TvArtwork
-                      class={styles.tvCardArt}
-                      src={albumCoverUrl(album)}
-                      alt={album.title}
-                      fallbackLabel={album.title}
-                    />
-                    <span class={styles.tvCardTitle}>{album.title}</span>
-                    <span class={styles.tvCardMeta}>
-                      {album.album_artist || t('tv.library.unknownArtist')}
-                    </span>
-                  </Control>
+                  />
                 );
               }}
             </For>
@@ -303,24 +290,15 @@ export function TvHome(props: TvHomeProps) {
                 const tvId = () => `home-playlist-${idx()}`;
                 const count = () => state.playlists[name]?.length ?? 0;
                 return (
-                  <Control
-                    data-tv-id={tvId()}
-                    data-tv-group="home-playlists"
-                    data-tv-index={String(idx())}
-                    data-tv-focused={focus.activeId() === tvId() ? 'true' : undefined}
-                    class={styles.tvCard}
-                    classList={{ [styles.tvFocusTarget]: true }}
-                    onClick={() => props.onNavigate(playlistTvHash(name))}
-                  >
-                    <TvArtwork
-                      class={styles.tvCardArt}
-                      src={playlistCoverUrl(name, state.playlists, trackIndex(), state.librarySettings)}
-                      alt={name}
-                      fallbackLabel={name}
-                    />
-                    <span class={styles.tvCardTitle}>{name}</span>
-                    <span class={styles.tvCardMeta}>{trackCount(count())}</span>
-                  </Control>
+                  <TvCard
+                    id={tvId()}
+                    group="home-playlists"
+                    index={idx()}
+                    title={name}
+                    subtitle={trackCount(count())}
+                    artwork={playlistCoverUrl(name, state.playlists, trackIndex(), state.librarySettings)}
+                    onActivate={() => props.onNavigate(playlistTvHash(name))}
+                  />
                 );
               }}
             </For>
@@ -342,30 +320,19 @@ export function TvHome(props: TvHomeProps) {
               {(album, idx) => {
                 const tvId = () => `home-album-${idx()}`;
                 return (
-                  <Control
-                    data-tv-id={tvId()}
-                    data-tv-group="home-albums"
-                    data-tv-index={String(idx())}
-                    data-tv-focused={focus.activeId() === tvId() ? 'true' : undefined}
-                    class={styles.tvCard}
-                    classList={{ [styles.tvFocusTarget]: true }}
-                    onClick={() =>
+                  <TvCard
+                    id={tvId()}
+                    group="home-albums"
+                    index={idx()}
+                    title={album.title}
+                    subtitle={album.album_artist || t('tv.library.unknownArtist')}
+                    artwork={albumCoverUrl(album)}
+                    onActivate={() =>
                       props.onNavigate(
                         albumTvHash({ id: album.id, name: album.title, artist: album.album_artist }),
                       )
                     }
-                  >
-                    <TvArtwork
-                      class={styles.tvCardArt}
-                      src={albumCoverUrl(album)}
-                      alt={album.title}
-                      fallbackLabel={album.title}
-                    />
-                    <span class={styles.tvCardTitle}>{album.title}</span>
-                    <span class={styles.tvCardMeta}>
-                      {album.album_artist || t('tv.library.unknownArtist')}
-                    </span>
-                  </Control>
+                  />
                 );
               }}
             </For>
