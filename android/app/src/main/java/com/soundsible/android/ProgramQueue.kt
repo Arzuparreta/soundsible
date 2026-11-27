@@ -46,10 +46,10 @@ object ProgramQueue {
         val keys = (0 until player.mediaItemCount).joinToString("|") { key(player, it) }
         return MessageDigest.getInstance("SHA-256").digest(keys.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     }
-    const val LIMIT = 1000
+    const val LIMIT = ProgramQueueWindow.MAX_ROWS
     /** Metadata only crosses the bridge. Credentials and source addresses stay native. */
     fun items(connection: EngineConnection, rows: JSONArray, program: String = "", contextKind: String? = null, contextId: String? = null, lane: String? = null): List<MediaItem> {
-        require(rows.length() in 1..LIMIT && rows.toString().toByteArray(Charsets.UTF_8).size <= 256 * 1024)
+        require(rows.length() in 1..LIMIT && rows.toString().toByteArray(Charsets.UTF_8).size <= ProgramQueueWindow.MAX_BYTES)
         require(contextKind == null || contextKind in listOf("album", "artist", "playlist"))
         require(contextId == null || (contextId.isNotBlank() && contextId.length <= 512))
         fun number(row: org.json.JSONObject, name: String) = row.optDouble(name, Double.NaN).takeIf { it.isFinite() }

@@ -157,7 +157,10 @@ export function contractCommands(command: ProgramCommand, view: Projection, posi
     case 'radio': {
       if (!command.enabled) return [['radio.stop', {}]];
       const seed = entries[state.index];
-      if (!seed || isPodcastTrack(seed)) throw new RemoteProgramUnsupported();
+      if (!seed || isPodcastTrack(seed) ||
+        command.queueToken !== state.queueToken || (command.key !== undefined && command.key !== seed.queueId)) {
+        throw new RemoteProgramUnsupported();
+      }
       return [['radio.start', { track: prepareRemoteTrack(seed as Track) }]];
     }
     case 'dj':

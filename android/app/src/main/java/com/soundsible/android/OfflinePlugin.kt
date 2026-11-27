@@ -12,6 +12,13 @@ import org.json.JSONObject
 class OfflinePlugin : Plugin() {
     private val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
     @Volatile private var closed = false
+    private val changed: () -> Unit = {
+        val generation = EngineConnection.shared(context).generation
+        bridge.execute { if (!closed) notifyListeners("offlineChanged", JSObject().put("generation", generation)) }
+    }
+
+    private var observed: OfflineStore? = null
+
     @PluginMethod fun command(call: PluginCall) {
         if (closed) { unavailable(call); return }
         activity.runOnUiThread {
@@ -37,6 +44,10 @@ class OfflinePlugin : Plugin() {
                 if (closed) { unavailable(call); return@work }
                 try {
                     val store=OfflineStore.shared(context)
+                    if (observed == null) {
+                        store.changes.add(changed)
+                        observed = store
+                    }
                     val epoch=call.getInt("generation")?.toLong() ?: -1L
                     if (BuildConfig.DEBUG && call.getString("action") != "state") android.util.Log.d("OfflineCommand", call.getString("action") ?: "unknown")
                     when(call.getString("action")) {
@@ -55,5 +66,9 @@ class OfflinePlugin : Plugin() {
             }
         } catch (_: java.util.concurrent.RejectedExecutionException) { unavailable(call) }
     }
-    override fun handleOnDestroy() { closed = true; executor.shutdown() }
+    override fun handleOnDestroy() {
+        closed = true
+        executor.execute { observed?.changes?.remove(changed) }
+        executor.shutdown()
+    }
 }

@@ -35,6 +35,40 @@ public class PlaybackTest {
     @Test public void verifiedTlsProgram() throws Exception {
         runProgram(InstrumentationRegistry.getArguments().getString("tlsOrigin"));
     }
+    @Test public void oversizedQueueKeepsSelectedOccurrenceAndRefillsWithNativePlayback() throws Exception {
+        String origin = InstrumentationRegistry.getArguments().getString("fixtureOrigin");
+        assumeNotNull(origin);
+        var connection = EngineConnection.shared(InstrumentationRegistry.getInstrumentation().getTargetContext());
+        connection.clearSession(true);
+        StartupTest web = new StartupTest();
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            web.awaitReady(scenario);
+            web.evaluate(scenario, "document.querySelector('input[type=url]').value=" + JSONObject.quote(origin) + ";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
+            waitFor(web, scenario, "!!document.querySelector('input[type=password]')");
+            web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
+            waitFor(web, scenario, "!!document.querySelector('[data-testid=android-library]')");
+            web.evaluate(scenario, """
+                window.__bridge = Capacitor.Plugins.SoundsiblePlayback;
+                window.__bridge.state().then(state => {
+                  const tracks = Array.from({ length: 1001 }, (_, i) => ({ id: 'member-track', source: 'local', title: 'Occurrence ' + i, artist: 'Fixture' }));
+                  return window.__bridge.command({ action: 'queue', tracks, index: 500, generation: state.generation });
+                }).then(state => window.__opening = state);
+                """);
+            waitFor(web, scenario, "window.__opening?.items[window.__opening.index]?.title === 'Occurrence 500'");
+            web.evaluate(scenario, """
+                const s = window.__opening;
+                const index = s.items.length - 1;
+                window.__expected = 'Occurrence ' + (Number(s.items[index].title.split(' ').at(-1)) + 1);
+                window.__bridge.addListener('playbackState', state => window.__refilled = state)
+                  .then(() => window.__bridge.command({ action: 'select', index, key: s.items[index].key, queueToken: s.queueToken, generation: s.generation }));
+                """);
+            waitFor(web, scenario, """
+                window.__refilled?.programToken === window.__opening.programToken &&
+                window.__refilled.items.some(item => item.title === window.__expected) &&
+                window.__refilled.playing
+                """);
+        } finally { connection.clearSession(true); }
+    }
     private void audioFailure(EngineConnection connection, String origin, int status) throws Exception {
         try (okhttp3.Response response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/__fixture/audio-failure")
             .header("X-Android-Fixture", "isolated").post(okhttp3.RequestBody.create("{\"account\":\"member\",\"status\":" + status + "}", okhttp3.MediaType.get("application/json"))).build()).execute()) { assertEquals(200, response.code()); }
