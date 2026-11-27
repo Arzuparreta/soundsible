@@ -10,7 +10,7 @@ import { MoreIcon, PinIcon } from './icons';
 import Button from './Button';
 import styles from './SavedEntities.module.css';
 
-/** Pinned artist and album bookmarks, displayed inside the Library root's ordinary page scroller. */
+/** Pinned artist and album bookmarks, shown on Home and on the Bookmarks routes. */
 export default function SavedEntities(props: { kind?: SavedEntity['kind']; expanded?: boolean; match?: (entry: SavedEntity) => boolean }) {
   onMount(() => void syncSavedEntities());
   const source = (kind: SavedEntity['kind']) => savedEntities().filter(entry => entry.kind === kind);
@@ -37,7 +37,7 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
           <div class={styles.header}>
             <h2><PinIcon size={18} class={styles.pin} /><span>{heading(kind)}</span></h2>
             <Show when={!props.expanded && !props.match && matches().length}>
-              <MusicLink class={styles.more} path={`/?saved=${kind === 'album' ? 'albums' : 'artists'}`} label={`${t('searchHome.seeAll')}: ${heading(kind)}`}>{t('searchHome.seeAll')}</MusicLink>
+              <MusicLink class={styles.more} path={`/bookmarks/${kind === 'album' ? 'albums' : 'artists'}`} label={`${t('searchHome.seeAll')}: ${heading(kind)}`}>{t('searchHome.seeAll')}</MusicLink>
             </Show>
           </div>
           <Show when={matches().length} fallback={<Show when={!entitiesLoading() && !entitiesError()}>

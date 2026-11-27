@@ -18,12 +18,12 @@ export function contextDestination(
   context: PlaybackContextDescriptor,
   sample?: Track | null,
 ): string | undefined {
-  if (context.kind === 'library' && context.destination === '/') return '/library?view=songs';
+  if (context.kind === 'library' && (context.destination === '/' || context.destination === '/library?view=songs')) return '/songs';
   if (context.destination) return context.destination;
   const view = sample?.source === 'preview' ? 'discover' : 'library';
   switch (context.kind) {
     case 'library':
-      return '/library?view=songs';
+      return '/songs';
     case 'favourites':
       return '/favourites';
     case 'playlist': {
@@ -69,7 +69,7 @@ export function playlistContext(
 
 /** The whole library, played from its song list. */
 export function libraryContext(label: string): PlaybackContextDescriptor {
-  return { id: 'library', kind: 'library', label, destination: '/library?view=songs' };
+  return { id: 'library', kind: 'library', label, destination: '/songs' };
 }
 
 export function favouritesContext(label: string): PlaybackContextDescriptor {

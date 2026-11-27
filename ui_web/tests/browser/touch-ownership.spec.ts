@@ -8,7 +8,7 @@ test('native touches release list scrolling and retain player pull-down dismissa
   await mockMusicEngine(page);
   // A request lane long enough to scroll: the list under the finger.
   await restoreQueueSession(page, { current: TRACKS[319], requests: TRACKS.slice(200, 230) });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await openMiniPlayer(page, /Canción de biblioteca 320/);
   await page.locator('[data-player-surface-open] [data-compact-list-toggle]').tap();
   const surface = page.locator('[data-player-surface-open]');

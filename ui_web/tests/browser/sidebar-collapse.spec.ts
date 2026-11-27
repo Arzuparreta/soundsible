@@ -133,7 +133,7 @@ for (const { size, width, height } of [
       localStorage.setItem('soundsible:interface-size', selected);
     }, size);
 
-    await page.goto('/player/#/library?view=songs');
+    await page.goto('/player/#/songs');
     const aside = page.locator('aside');
     await expect(aside).toBeVisible();
     await expect(aside.getByRole('link', { name: 'soundsible', exact: true })).toBeVisible();
@@ -186,14 +186,14 @@ test('collapsing widens center workspace beside Docked Now Playing and re-measur
   await page.addInitScript(() => {
     localStorage.setItem('soundsible:interface-size', 'normal');
   });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Pista 1/ }).first().click();
   await openMiniPlayer(page, /^NORMAL:/);
   await settle(page, '[data-player-surface-open]');
   await expect(page.locator('[data-player-surface-open]')).toHaveAttribute('data-docked', '');
 
   await page.locator('aside').getByRole('link', { name: 'Álbumes', exact: true }).click();
-  await expect(page).toHaveURL(/#\/library\?view=albums$/);
+  await expect(page).toHaveURL(/#\/albums$/);
   const scrollport = page.locator('#app [data-primary-scroll]:visible').first();
   await expect(scrollport.locator('a').first()).toBeVisible();
 

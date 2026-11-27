@@ -166,7 +166,7 @@ test.describe('interface scale geometry', () => {
     test(`${size} keeps the player and navigation usable through settings`, async ({ page }) => {
       await mockEngine(page, true);
       await installPreferences(page, size);
-      await page.goto('/player/#/library?view=songs');
+      await page.goto('/player/#/songs');
       await page.getByRole('button', { name: /Reproducir Una canción/ }).click();
       const player = page.locator('[data-omni-player]');
       await expect(player).toBeVisible();
@@ -206,11 +206,10 @@ test.describe('interface scale geometry', () => {
 
       await settingsLink.click();
       await expect(page).toHaveURL(/#\/settings$/);
-      // Library comes back on the songs it was left on; again, and it is home.
-      await page.getByRole('link', { name: 'Biblioteca', exact: true }).filter({ visible: true }).click();
-      await expect(page).toHaveURL(/#\/library\?view=songs$/);
-      await page.getByRole('link', { name: 'Biblioteca', exact: true }).filter({ visible: true }).click();
-      await expect(page.getByRole('heading', { name: 'Biblioteca', exact: true })).toBeVisible();
+      // Home opens directly on a single tap/click instead of returning to Songs.
+      await page.getByRole('link', { name: 'Inicio', exact: true }).filter({ visible: true }).click();
+      await expect(page).toHaveURL(/#\/$/);
+      await expect(page.getByRole('heading', { name: 'Inicio', exact: true })).toBeVisible();
       expect(await player.evaluate((element, original) => element === original, originalPlayer)).toBe(true);
     });
   }
@@ -295,7 +294,7 @@ test.describe('interface scale geometry', () => {
   test('back and forward traverse settings routes inside the shell', async ({ page }) => {
     await mockEngine(page, true);
     await installPreferences(page, 'normal');
-    await page.goto('/player/#/library?view=songs');
+    await page.goto('/player/#/songs');
     await expect(page.getByRole('heading', { name: 'Canciones' })).toBeVisible();
     await page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }).click();
     const settings = page.locator('[data-settings-page]');
@@ -379,7 +378,7 @@ test.describe('interface scale geometry', () => {
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
 
-    for (const route of ['/', '/favourites', '/search', '/playlists', '/podcasts', '/downloads']) {
+    for (const route of ['/', '/songs', '/albums', '/artists', '/bookmarks', '/favourites', '/search', '/playlists', '/podcasts', '/downloads']) {
       await page.goto(`/player/#${route}`);
       await expect(page.locator('main .view')).toBeVisible();
       await assertGeometry(page);
@@ -391,7 +390,7 @@ test.describe('interface scale geometry', () => {
   test('large Now Playing surface reflows after selecting a library track', async ({ page }) => {
     await mockEngine(page, true);
     await installPreferences(page, 'large');
-    await page.goto('/player/#/library?view=songs');
+    await page.goto('/player/#/songs');
     const track = page.getByRole('button', {
       name: /Reproducir Una canción con un título deliberadamente largo.*Artista con nombre especialmente largo/,
     });

@@ -20,7 +20,6 @@ export function ViewHeader(props: {
   rendersOwnCommands?: boolean;
   /** A native control both toolbars carry as is, preserving its keyboard behavior. */
   trailing?: JSX.Element;
-  onViewChange?: () => void;
   compact?: boolean;
   onTitleTap?: () => void;
 }) {
@@ -28,7 +27,6 @@ export function ViewHeader(props: {
     useAppBar({
       title: () => props.title,
       indicator: true,
-      get onViewChange() { return props.onViewChange; },
       actions: () => props.barActions ?? [],
       search: () => props.search,
       trailing: () => props.trailing,

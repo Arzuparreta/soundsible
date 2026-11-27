@@ -28,7 +28,7 @@ export const zh: Dict = {
   savedEntities: {
     albums: "专辑",
     artists: "艺人",
-    back: "返回音乐库",
+    back: "返回首页",
     inLibrary: "已在音乐库中",
     library: "你的音乐库",
 
@@ -123,6 +123,7 @@ export const zh: Dict = {
     live: '直播',
     downloads: '下载',
     settings: '设置',
+    home: '首页',
     library: '资料库',
     collection: '曲库',
     collapseSidebar: '收起侧边栏',

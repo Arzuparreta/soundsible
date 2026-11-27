@@ -299,7 +299,7 @@ export default function Album() {
   const back = () => navigateBackOr(
     navigate,
     view() === 'library'
-      ? (tabRoot('/') ?? '/')
+      ? '/'
       : (tabRoot('/search') ?? (artistName() ? artistPath(artistName(), { view: 'discover' }) : '/search')),
   );
   let openCollectionMenu = () => {};

@@ -27,7 +27,7 @@ export const en = {
   savedEntities: {
     albums: "Albums",
     artists: "Artists",
-    back: "Back to Library",
+    back: "Back to Home",
     inLibrary: "In your library",
     library: "Your library",
 
@@ -123,6 +123,7 @@ export const en = {
     live: 'Live',
     downloads: 'Downloads',
     settings: 'Settings',
+    home: 'Home',
     library: 'Library',
     collection: 'Collection',
     collapseSidebar: 'Collapse sidebar',

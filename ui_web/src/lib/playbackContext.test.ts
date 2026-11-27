@@ -6,8 +6,9 @@ describe('where the context card leads', () => {
     expect(contextDestination({
       id: 'album:record', kind: 'album', label: 'Record', destination: '/album/Record?artist=Band&view=discover&deezer_id=9',
     })).toBe('/album/Record?artist=Band&view=discover&deezer_id=9');
-    expect(contextDestination(libraryContext('Library'))).toBe('/library?view=songs');
-    expect(contextDestination({ id: 'library', kind: 'library', label: 'Library', destination: '/' })).toBe('/library?view=songs');
+    expect(contextDestination(libraryContext('Library'))).toBe('/songs');
+    expect(contextDestination({ id: 'library', kind: 'library', label: 'Library', destination: '/' })).toBe('/songs');
+    expect(contextDestination({ id: 'library', kind: 'library', label: 'Library', destination: '/library?view=songs' })).toBe('/songs');
     expect(contextDestination(favouritesContext('Favourites'))).toBe('/favourites');
   });
 

@@ -12,7 +12,7 @@ export interface PrimaryNavItem {
 /** Canonical destinations and icons; desktop and mobile choose their own grouping. */
 export const primaryNavigation: PrimaryNavItem[] = [
   {
-    href: '/', label: () => t('nav.library'), end: true,
+    href: '/', label: () => t('nav.home'), end: true,
     icon: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" /></svg>,
   },
   {
@@ -94,10 +94,10 @@ export const libraryShortcuts: PrimaryNavItem[] = [
 
 /** Direct collection destinations are also selectable in the bottom bar. */
 export const libraryViews: PrimaryNavItem[] = [
-  { href: '/library?view=songs', label: () => t('library.songs'), icon: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg> },
-  { href: '/library?view=albums', label: () => t('library.albums'), icon: menuIcons.album },
-  { href: '/library?view=artists', label: () => t('library.artists'), icon: menuIcons.artist },
-  { href: '/?saved=bookmarks', label: () => t('savedEntities.title'), icon: menuIcons.bookmark },
+  { href: '/songs', label: () => t('library.songs'), icon: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg> },
+  { href: '/albums', label: () => t('library.albums'), icon: menuIcons.album },
+  { href: '/artists', label: () => t('library.artists'), icon: menuIcons.artist },
+  { href: '/bookmarks', label: () => t('savedEntities.title'), icon: menuIcons.bookmark },
 ];
 export const navigationItems = [...primaryNavigation, ...libraryShortcuts, ...libraryViews];
 export const defaultBottomNavigation = ['/', '/favourites', '/search', '/settings'];
@@ -106,14 +106,16 @@ export function isEntityPath(path: string): boolean {
   return /^\/(album|artist)\//.test(path);
 }
 
-export function mobileNavGroup(path: string, search = ''): string {
-  // Artist and album pages are neutral detail views: no primary destination owns them.
+/**
+ * Top-level navigation destination that owns `path`, or `''` for neutral
+ * entity pages (`/album/...`, `/artist/...`) that belong to no section.
+ */
+export function primaryDestination(path: string): string {
   if (isEntityPath(path)) return '';
-  const params = new URLSearchParams(search);
-  if (path === '/library' && ['songs', 'albums', 'artists'].includes(params.get('view') ?? '')) return `/library?view=${params.get('view')}`;
-  if (['/', '/library'].includes(path) && ['bookmarks', 'albums', 'artists'].includes(params.get('saved') ?? '')) return '/?saved=bookmarks';
-  if (path === '/' || path === '/library') return '/';
-  return navigationItems.find(item => item.href !== '/' && (path === item.href || path.startsWith(`${item.href}/`)))?.href ?? path;
+  if (path === '/') return '/';
+  return navigationItems.find(
+    (item) => item.href !== '/' && (path === item.href || path.startsWith(`${item.href}/`)),
+  )?.href ?? path;
 }
 
 export interface NavigationGroup {
@@ -132,7 +134,7 @@ export const navigationGroups: NavigationGroup[] = [
     label: () => t('nav.collection'),
     showHeading: true,
     secondary: true,
-    hrefs: ['/library?view=songs', '/library?view=albums', '/library?view=artists', '/playlists', '/favourites'],
+    hrefs: ['/songs', '/albums', '/artists', '/playlists', '/favourites'],
   },
   { id: 'utilities', label: () => t('nav.application'), showHeading: false, secondary: true, footer: true, hrefs: ['/downloads', '/settings'] },
 ];

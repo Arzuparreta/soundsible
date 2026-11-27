@@ -174,7 +174,7 @@ test('an authenticated module failure has an accessible retry that clears failed
   await expect(page.locator('#startup-screen')).toHaveCount(0);
   await page.unroute(player);
   await page.getByRole('button', { name: 'Reintentar', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Biblioteca', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Inicio', exact: true })).toBeVisible();
 });
 
 test('a first offline session exposes station recovery without loading playback', async ({ page }) => {
@@ -204,7 +204,7 @@ test('recovers an initial library failure even while the socket is unavailable',
   await mockMusicEngine(page);
   let attempts = 0;
   await page.route('**/api/library?*', route => ++attempts <= 2 ? route.abort() : route.fallback());
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await expect(page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ })).toBeVisible({ timeout: 12_000 });
   expect(attempts).toBeGreaterThanOrEqual(3);
 });
@@ -342,7 +342,7 @@ test('changing the authenticated account replaces the runtime and its library', 
     libraryReads++;
     return route.fulfill({ json: { tracks: [{ id: account, title: `Song ${account}`, artist: account, duration: 180, source: 'local' }], playlists: {}, settings: {}, podcast_subscriptions: [] } });
   });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await expect(page.getByRole('button', { name: /Reproducir Song first/ })).toBeVisible();
   account = 'second';
   await page.evaluate(async () => {
@@ -358,7 +358,7 @@ test('changing the authenticated account replaces the runtime and its library', 
 test('plain HTTP crypto capabilities allow the player to load and play music', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(globalThis.crypto, 'randomUUID', { value: undefined, configurable: true }));
   await mockMusicEngine(page);
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await expect(page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ })).toBeVisible();
   await expect(page.locator('#startup-screen')).toHaveCount(0);
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
@@ -376,7 +376,7 @@ test('a failed lazy player view retries without restarting playback', async ({ p
     failures++;
     return route.fulfill({ status: 503, body: 'temporary view failure', headers: { 'Cache-Control': 'no-store' } });
   });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   // The mobile workspace hides the underlying pill from accessibility while
   // open. Inspect its transport state even when that pill is covered.

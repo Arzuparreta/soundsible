@@ -26,7 +26,7 @@ describe('live handoff to the secure station', () => {
     expect(liveHandoffPending('#/live?handoff=live')).toBe(true);
     expect(liveHandoffPending('#/live?from=elsewhere&handoff=live')).toBe(true);
     expect(liveHandoffPending('#/live')).toBe(false);
-    expect(liveHandoffPending('#/library?handoff=live')).toBe(true);
+    expect(liveHandoffPending('#/songs?handoff=live')).toBe(true);
     expect(liveHandoffPending('')).toBe(false);
   });
 

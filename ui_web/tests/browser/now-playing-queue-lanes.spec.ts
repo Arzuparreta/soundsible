@@ -27,7 +27,7 @@ async function openQueuePanel(page: Page, song = /Canción de biblioteca 320/) {
 
 /** Play the song at the top of the library — the list reads newest first. */
 async function playFromLibrary(page: Page) {
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   return openQueuePanel(page);
 }
@@ -45,7 +45,7 @@ const PLAYLIST = { id: 'playlist:Viaje', kind: 'playlist', label: 'Viaje', desti
 /** Come back to a paused session with a long lane of requests. */
 async function restoreLongQueue(page: Page, descriptor?: Parameters<typeof restoreQueueSession>[1]['descriptor']) {
   await restoreQueueSession(page, { current: newest, requests: REQUESTS, context: TRACKS.slice(0, 5), descriptor });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   return openQueuePanel(page);
 }
 
@@ -154,7 +154,7 @@ test('a request dragged with the mouse shows where it will land and lands there'
 });
 
 test('the library card opens the library and leaves the music playing', async ({ page, isMobile }) => {
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await page.goto('/player/#/playlists');
   const queue = await openQueuePanel(page);
@@ -165,7 +165,7 @@ test('the library card opens the library and leaves the music playing', async ({
   const open = queue.getByRole('button', { name: 'Abrir Tu biblioteca' });
   if (isMobile) await open.tap();
   else await open.click();
-  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await expect(page).toHaveURL(/#\/songs$/);
   if (isMobile) {
     // A phone's player covers the app, so it gets out of the way.
     await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
@@ -179,7 +179,7 @@ test('the library card opens the library and leaves the music playing', async ({
 
 test('editing an expanded collection keeps it open with the songs it was showing', async ({ page, isMobile }) => {
   await restoreQueueSession(page, { current: newest, requests: [], context: TRACKS.slice(0, 40), descriptor: PLAYLIST });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   const queue = await openQueuePanel(page);
   const expand = queue.locator('[data-card-expand]');
   await expand.click({ position: { x: 24, y: 24 } });
@@ -217,7 +217,7 @@ for (const kind of ['album', 'artist', 'playlist', 'favourites', 'search'] as co
   test(`${kind} cards unfold a long collection twelve songs at a time`, async ({ page, isMobile }) => {
     await restoreQueueSession(page, { current: newest, requests: [], context: TRACKS.slice(0, 40),
       descriptor: { id: `fixture-${kind}`, kind, label: `Collection ${kind}` } });
-    await page.goto('/player/#/library?view=songs');
+    await page.goto('/player/#/songs');
     const queue = await openQueuePanel(page);
     await queue.locator('[data-card-expand]').click({ position: { x: 24, y: 24 } });
     const songs = queue.locator('[data-card-songs]');

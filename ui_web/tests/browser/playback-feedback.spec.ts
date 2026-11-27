@@ -14,7 +14,7 @@ test('Retry starts the failed track after a platform pause without reloading the
   await page.route('**/api/static/stream/**', route => available
     ? route.fulfill({ contentType: 'audio/wav', body: fixtureWav })
     : route.abort());
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   const retry = page.locator('[data-omni-player]').getByRole('button', { name: 'Reintentar', exact: true });
   await expect(retry).toBeVisible();
@@ -49,7 +49,7 @@ test('Retry starts the failed track after a platform pause without reloading the
 });
 
 test('a large queue remains bounded and transport updates preserve its rows in the pill, NORMAL and DJ', async ({ page }) => {
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   // Named by what it does. Keyed off `aria-busy` the locator described a state
   // rather than a control, so it stopped matching the moment the state changed
@@ -96,7 +96,7 @@ test('touch selection uses the orange treatment before audio loads and scrolling
     await route.fulfill({ contentType: 'audio/wav', body: fixtureWav });
   });
   try {
-    await page.goto('/player/#/library?view=songs');
+    await page.goto('/player/#/songs');
     const row = page.locator('[data-music-list-row]').first();
     const main = row.locator('[data-row-main]');
     const pointer = { pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: 40, clientY: 100 };

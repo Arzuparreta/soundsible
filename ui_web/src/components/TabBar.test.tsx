@@ -1,4 +1,3 @@
-import { libraryTab, setLibraryTab } from '../lib/libraryView';
 import { fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { Route, Router, useLocation, useNavigate, type Navigator, type RouteSectionProps } from '@solidjs/router';
 import { createEffect } from 'solid-js';
@@ -15,6 +14,7 @@ import { setState } from '../stores/core';
 import { TabBar } from './TabBar';
 
 let navigate: Navigator;
+const here = () => window.location.pathname + window.location.search;
 
 function renderTabs() {
   const Root = (props: RouteSectionProps) => {
@@ -50,19 +50,18 @@ afterEach(() => {
 });
 
 describe('mobile tab bar', () => {
-  it.each(['/', '/library', '/search', '/artist/example'])('opens the Library root from %s without selecting Songs', async (path) => {
+  it.each(['/', '/songs', '/search', '/artist/example'])('opens Home directly from %s', async (path) => {
     window.history.replaceState({}, '', path);
-    setLibraryTab('albums');
     const view = renderTabs();
-    fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
-    await waitFor(() => expect(libraryTab()).toBe('albums'));
+    fireEvent.click(view.getByRole('link', { name: 'Inicio' }));
     await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(view.getByRole('link', { name: 'Inicio' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('exposes the four default destinations', () => {
     const view = renderTabs();
     expect([...view.container.querySelector('nav')!.children].map((tab) => tab.textContent?.trim()))
-      .toEqual(['Biblioteca', 'Favoritos', 'Descubrir', 'Ajustes']);
+      .toEqual(['Inicio', 'Favoritos', 'Descubrir', 'Ajustes']);
   });
 
   it('marks settings subroutes active', () => {
@@ -82,23 +81,23 @@ describe('mobile tab bar', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('opens the Library root through the mobile drawer without resetting its subview', async () => {
-    setLibraryTab('artists');
+  it('opens Home directly through the mobile drawer from any route', async () => {
+    window.history.replaceState({}, '', '/artists');
     renderTabs();
     fireEvent.click(screen.getByRole('button', { name: 'Menú' }));
     const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('link', { name: 'Biblioteca' }));
+    fireEvent.click(within(dialog).getByRole('link', { name: 'Inicio' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    await waitFor(() => expect(libraryTab()).toBe('artists'));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
   });
 
-  it('keeps Library independent from the old Favourites preference', async () => {
+  it('keeps Home independent from the old Favourites preference', async () => {
     localStorage.setItem('library:mobileSection', 'favourites');
     window.history.replaceState({}, '', '/search');
     renderTabs();
-    fireEvent.click(screen.getByRole('link', { name: 'Biblioteca' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Inicio' }));
     await waitFor(() => expect(window.location.pathname).toBe('/'));
-    expect(screen.getByRole('link', { name: 'Biblioteca' })).toHaveClass(styles.active);
+    expect(screen.getByRole('link', { name: 'Inicio' })).toHaveClass(styles.active);
   });
 
   it('reselecting the active root tab returns its primary surface to the top', () => {
@@ -109,43 +108,73 @@ describe('mobile tab bar', () => {
     document.body.append(surface);
     renderTabs();
 
-    fireEvent.click(screen.getByRole('link', { name: 'Biblioteca' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Inicio' }));
 
+    expect(surface.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+  });
+
+  it('never absorbs Songs, Albums or Artists under Home in the tab bar', async () => {
+    window.history.replaceState({}, '', '/songs');
+    const view = renderTabs();
+    expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
+    navigate('/artist/Band?view=library');
+    await waitFor(() => expect(here()).toBe('/artist/Band?view=library'));
+    fireEvent.click(view.getByRole('link', { name: 'Inicio' }));
+    await waitFor(() => expect(here()).toBe('/'));
+  });
+
+  it('remembers real subroutes in the bottom tab bar and climbs to root on a second tap', async () => {
+    const surface = document.createElement('div');
+    surface.dataset.primaryScroll = '';
+    surface.scrollTop = 180;
+    surface.scrollTo = vi.fn();
+    document.body.append(surface);
+    window.history.replaceState({}, '', '/settings/devices');
+    const view = renderTabs();
+
+    fireEvent.click(view.getByRole('link', { name: 'Favoritos' }));
+    await waitFor(() => expect(here()).toBe('/favourites'));
+
+    fireEvent.click(view.getByRole('link', { name: 'Ajustes' }));
+    await waitFor(() => expect(here()).toBe('/settings/devices'));
+
+    fireEvent.click(view.getByRole('link', { name: 'Ajustes' }));
+    await waitFor(() => expect(here()).toBe('/settings'));
+
+    fireEvent.click(view.getByRole('link', { name: 'Ajustes' }));
     expect(surface.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
   });
 });
 
-it('opens a configured subentry directly and highlights it instead of the root', async () => {
-  setBottomNavigation(['/', '/library?view=artists', '/?saved=bookmarks', '/search']);
+it('opens configured collection destinations directly and highlights them', async () => {
+  setBottomNavigation(['/', '/artists', '/bookmarks', '/search']);
   const view = renderTabs();
   fireEvent.click(view.getByRole('link', { name: 'Artistas' }));
-  await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/library?view=artists'));
+  await waitFor(() => expect(here()).toBe('/artists'));
   expect(view.getByRole('link', { name: 'Artistas' })).toHaveAttribute('aria-current', 'page');
-  expect(view.getByRole('link', { name: 'Biblioteca' })).not.toHaveAttribute('aria-current');
+  expect(view.getByRole('link', { name: 'Inicio' })).not.toHaveAttribute('aria-current');
   fireEvent.click(view.getByRole('link', { name: 'Marcadores' }));
-  await waitFor(() => expect(window.location.search).toBe('?saved=bookmarks'));
+  await waitFor(() => expect(here()).toBe('/bookmarks'));
   expect(view.getByRole('link', { name: 'Marcadores' })).toHaveAttribute('aria-current', 'page');
-  fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
-  await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/'));
+  fireEvent.click(view.getByRole('link', { name: 'Inicio' }));
+  await waitFor(() => expect(here()).toBe('/'));
 });
 
 describe('artist and album pages', () => {
-  const here = () => window.location.pathname + window.location.search;
-
   it.each(['/artist/Band?view=library', '/album/Record?artist=Band&view=discover'])('highlight no tab: %s', (path) => {
     window.history.replaceState({}, '', path);
     const view = renderTabs();
     expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
   });
 
-  it('leave Search and Library tab memory intact when opened', async () => {
+  it('leave Search and Home tab memory intact when opened', async () => {
     window.history.replaceState({}, '', '/search?q=band');
     const view = renderTabs();
     navigate('/artist/Band?view=discover');
     await waitFor(() => expect(here()).toBe('/artist/Band?view=discover'));
     expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(0);
 
-    fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
+    fireEvent.click(view.getByRole('link', { name: 'Inicio' }));
     await waitFor(() => expect(here()).toBe('/'));
     fireEvent.click(view.getByRole('link', { name: 'Descubrir' }));
     await waitFor(() => expect(here()).toBe('/search?q=band'));
@@ -153,13 +182,15 @@ describe('artist and album pages', () => {
     expect(tabRoot('/search')).toBe('/search?q=band');
   });
 
-  it('opened by a link from Library leave Library where it was left', async () => {
-    window.history.replaceState({}, '', '/?saved=albums');
-    setBottomNavigation(['/', '/search', '/settings']);
+  it('remembers a configured Bookmarks subroute across entity visits and climbs on re-tap', async () => {
+    window.history.replaceState({}, '', '/bookmarks/albums');
+    setBottomNavigation(['/', '/bookmarks', '/search']);
     const view = renderTabs();
     navigate('/album/Record?artist=Band&view=library');
     await waitFor(() => expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(0));
-    fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
-    await waitFor(() => expect(here()).toBe('/?saved=albums'));
+    fireEvent.click(view.getByRole('link', { name: 'Marcadores' }));
+    await waitFor(() => expect(here()).toBe('/bookmarks/albums'));
+    fireEvent.click(view.getByRole('link', { name: 'Marcadores' }));
+    await waitFor(() => expect(here()).toBe('/bookmarks'));
   });
 });

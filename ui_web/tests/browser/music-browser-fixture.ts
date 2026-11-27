@@ -109,7 +109,7 @@ export async function openMiniPlayer(page: Page, name: RegExp): Promise<void> {
 }
 
 export async function openMusicPlayer(page: Page) {
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await openMiniPlayer(page, /^NORMAL:/);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();

@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('artist links navigate without playing and preserve browser history', async ({ page, isMobile }) => {
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   const link = page.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await expect(link).toBeVisible();
   await expect(page.locator('button a, [role="button"] a, a a')).toHaveCount(0);
@@ -30,7 +30,7 @@ test('artist links navigate without playing and preserve browser history', async
   await expect(page.getByRole('heading', { name: 'Artista 7', exact: true })).toBeVisible();
   await expect(page.locator('[data-omni-player]')).not.toContainText('Canción de biblioteca');
   await page.goBack();
-  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await expect(page).toHaveURL(/#\/songs$/);
   await expect(page.getByRole('link', { name: 'Artista 7', exact: true }).first()).toBeVisible();
 });
 
@@ -43,13 +43,12 @@ test('artist and album details stay neutral and leave tab memory intact', async 
   await page.goto('/player/#/search?q=disco');
   await expect(page.getByRole('searchbox')).toHaveValue('disco');
 
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await activate(page, page.getByRole('link', { name: 'Artista 7', exact: true }).first(), isMobile);
   await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
   const activeNav = page.locator('[aria-current="page"][data-nav-href]').filter({ visible: true });
   const searchTab = page.locator('[data-nav-href="/search"]').filter({ visible: true });
-  const libraryTab = page.locator('[data-nav-href="/"]').filter({ visible: true });
-  const libraryOwner = isMobile ? libraryTab : page.locator('[data-nav-href="/library?view=songs"]');
+  const homeTab = page.locator('[data-nav-href="/"]').filter({ visible: true });
   await expect(activeNav).toHaveCount(0);
 
   const scope = page.getByRole('combobox', { name: 'Contenido mostrado' });
@@ -67,9 +66,23 @@ test('artist and album details stay neutral and leave tab memory intact', async 
   await expect(page.getByRole('searchbox')).toHaveValue('disco');
   await expect(searchTab).toHaveAttribute('aria-current', 'page');
 
-  await activate(page, libraryTab, isMobile);
-  await expect(page).toHaveURL(/#\/library\?view=songs$/);
-  await expect(libraryOwner).toHaveAttribute('aria-current', 'page');
+  // Navigating from Songs to an Artist then clicking Home opens Home directly.
+  await page.goto('/player/#/songs');
+  await activate(page, page.getByRole('link', { name: 'Artista 7', exact: true }).first(), isMobile);
+  await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
+  await activate(page, homeTab, isMobile);
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(homeTab).toHaveAttribute('aria-current', 'page');
+
+  if (!isMobile) {
+    await page.goto('/player/#/songs');
+    await activate(page, page.getByRole('link', { name: 'Artista 7', exact: true }).first(), isMobile);
+    await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
+    const songsLink = page.locator('[data-nav-href="/songs"]');
+    await activate(page, songsLink, isMobile);
+    await expect(page).toHaveURL(/#\/songs$/);
+    await expect(songsLink).toHaveAttribute('aria-current', 'page');
+  }
 });
 
 test('opening an artist from the player on a utility tab stays neutral and leaves that tab untouched', async ({ page, isMobile }) => {
@@ -167,7 +180,7 @@ test('an album card opens the record from the line under its cover', async ({ pa
     id: 'al-1', title: 'Disco de prueba', album_artist: 'Artista 7', is_compilation: false,
     track_count: 12, duration: 2400, cover_track_id: null,
   }] } }));
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   if (isMobile) {
     await page.getByRole('button', { name: 'Menú', exact: true }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'Álbumes', exact: true }).click();
@@ -202,7 +215,7 @@ test('album cards open from their artwork, in the library and in search', async 
     if (isMobile) await page.touchscreen.tap(point.x, point.y); else await page.mouse.click(point.x, point.y);
   };
 
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   if (isMobile) {
     await page.getByRole('button', { name: 'Menú', exact: true }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'Álbumes', exact: true }).click();
@@ -227,7 +240,7 @@ test('desktop artist links support keyboard and a separate tab', async ({ page, 
   // The new tab needs the same authenticated engine before its scripts run.
   await mockMusicEngine(context);
   await mockArtist(context);
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await expect(page.locator('html')).not.toHaveAttribute('data-booting', '');
   const link = page.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await expect(link).toBeVisible();
@@ -248,13 +261,13 @@ test('desktop artist links support keyboard and a separate tab', async ({ page, 
   });
   await link.click({ modifiers: ['Control'] });
   expect(await page.evaluate(() => (window as unknown as { modifiedClick?: string }).modifiedClick)).toBe('seen');
-  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await expect(page).toHaveURL(/#\/songs$/);
   const tab = await context.newPage();
   await tab.goto(new URL((await link.getAttribute('href'))!, page.url()).href);
   await expect(tab).toHaveURL(/#\/artist\/Artista%207\?view=library/);
   await expect(tab.getByRole('heading', { name: 'Artista 7', exact: true })).toBeVisible();
   await tab.close();
-  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await expect(page).toHaveURL(/#\/songs$/);
   await link.focus();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
@@ -263,7 +276,7 @@ test('desktop artist links support keyboard and a separate tab', async ({ page, 
 
 test('miniplayer artist navigates independently from expansion', async ({ page, isMobile }) => {
   test.skip(isMobile, 'the compact pill is one press to open the player; see the mobile case below');
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   const mini = page.locator('[data-omni-player]');
   const link = mini.getByRole('link', { name: 'Artista 7', exact: true });
@@ -280,7 +293,7 @@ test('miniplayer artist navigates independently from expansion', async ({ page, 
    nothing at all because it painted over the open button. */
 test('every inert part of the compact pill opens the player on a phone', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'the desktop bar keeps the artist link');
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   const mini = page.locator('[data-omni-player]');
   const surface = page.locator('[data-player-surface-open]');
@@ -296,7 +309,7 @@ test('every inert part of the compact pill opens the player on a phone', async (
     const box = await settledBox(page, mini.locator(part));
     await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
     await expect(surface).toHaveCount(1);
-    await expect(page).toHaveURL(/#\/library\?view=songs$/);
+    await expect(page).toHaveURL(/#\/songs$/);
     await page.keyboard.press('Escape');
     await expect(surface).toHaveCount(0);
   }
@@ -343,7 +356,7 @@ test('Explore from rows link verified YouTube performers while leaving channels 
 
 test('a native scroll starting on an artist link does not navigate or play', async ({ page, context }, info) => {
   test.skip(info.project.name !== 'chromium-mobile', 'Native touch injection uses CDP');
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   const links = page.getByRole('link', { name: /^Artista / });
   await expect(links.first()).toBeVisible();
   const link = links.nth(5);
@@ -356,7 +369,7 @@ test('a native scroll starting on an artist link does not navigate or play', asy
   });
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect.poll(() => page.locator('[data-library-scroll]').evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await expect(page).toHaveURL(/#\/songs$/);
   await expect(page.locator('[data-now-playing]')).toHaveCount(0);
   await session.detach();
 });

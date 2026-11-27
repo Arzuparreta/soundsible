@@ -34,7 +34,7 @@ test('NORMAL queue offers collection actions for the selected song without chang
     } else await route.fulfill({ json: { queue: [], is_processing: false, logs: [] } });
   });
   await restoreQueueSession(page, { current: TRACKS[319], requests: [STREAMED] });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await openMiniPlayer(page, /Canción de biblioteca 320/);
   await showPlayerPanel(page, 'queue');
   const queue = page.locator('[data-now-playing-tile="queue"]');

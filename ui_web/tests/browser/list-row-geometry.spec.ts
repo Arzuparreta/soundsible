@@ -70,7 +70,7 @@ for (const density of ['compact', 'normal', 'large'] as const) {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     for (const route of [
-      '/library?view=songs', '/library?view=songs&q=Halo%20artista', '/favourites', '/playlists/Halo',
+      '/songs', '/songs?q=Halo%20artista', '/favourites', '/playlists/Halo',
       '/artist/Halo%20artista%200?view=library', '/album/Halo%20%C3%A1lbum?artist=Halo%20artista%200&view=library',
       '/search?q=Halo',
     ]) await test.step(route, async () => {
@@ -97,7 +97,7 @@ for (const density of ['compact', 'normal', 'large'] as const) {
 
 test('mounted mixed results follow live density and desktop/mobile breakpoint changes', async ({ page }) => {
   await mockLists(page);
-  await page.goto('/player/#/library?view=songs&q=Halo%20artista');
+  await page.goto('/player/#/songs?q=Halo%20artista');
   for (const width of [1366, 390, 1024, 768]) {
     await page.setViewportSize({ width, height: 844 });
     for (const density of ['large', 'compact', 'normal'] as const) {
@@ -112,7 +112,7 @@ test('collection search uses the full toolbar on desktop and opens from the app 
   const routes = ['/favourites', '/playlists', '/playlists/Halo',
     '/artist/Halo%20artista%200?view=library',
     '/album/Halo%20%C3%A1lbum?artist=Halo%20artista%200&view=library'];
-  if (!isMobile) routes.unshift('/library?view=songs');
+  if (!isMobile) routes.unshift('/songs');
   for (const route of routes) await test.step(route, async () => {
     await page.goto(`/player/#${route}`);
     if (isMobile) {
@@ -202,7 +202,7 @@ test('an active filter stays open while scrolling, and an empty filter stays ope
 test('an empty filter can be swiped closed on a short collection', async ({ page, isMobile, browserName }) => {
   test.skip(!isMobile || browserName !== 'chromium', 'CDP injects trusted touch gestures');
   await mockLists(page);
-  await page.goto('/player/#/library?view=artists');
+  await page.goto('/player/#/artists');
   const surface = page.locator('[data-primary-scroll]');
   const field = page.getByRole('searchbox');
   await expect(surface.getByText('Halo artista 0')).toBeVisible();

@@ -51,7 +51,7 @@ async function routeSong(page: Page, alreadySaved = false) {
   // Restore the playing context and arrange DJ through the real store. These
   // tests exercise row menus; starting DJ through its tab is covered separately.
   await restoreQueueSession(page, { current: TRACKS[319], requests: [], context: TRACKS.slice(-5, -1) });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await expect.poll(() => page.evaluate(async () => {
     const modulePath = '/player/src/stores/index.ts';
     const { state } = await import(/* @vite-ignore */ modulePath);

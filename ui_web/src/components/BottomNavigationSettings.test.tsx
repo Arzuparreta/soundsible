@@ -4,7 +4,9 @@ import { setLocale } from '../lib/i18n';
 import { bottomNavigation, resolveBottomNavigation, setBottomNavigation } from '../lib/bottomNavigation';
 import { defaultBottomNavigation } from './primaryNavigation';
 import { BottomNavigationSettings } from './BottomNavigationSettings';
+
 beforeEach(async () => { await setLocale('es'); setBottomNavigation(defaultBottomNavigation); });
+
 describe('bottom navigation editor', () => {
   it('swaps occupied destinations, adds up to five and removes down to three', () => {
     render(() => <BottomNavigationSettings />);
@@ -17,7 +19,7 @@ describe('bottom navigation editor', () => {
     expect(screen.getAllByRole('combobox')).toHaveLength(5);
     expect(screen.queryByRole('button', { name: 'Añadir destino' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Quitar Ajustes' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Quitar Biblioteca' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar Inicio' }));
     expect(screen.getAllByRole('combobox')).toHaveLength(3);
     expect(screen.getByRole('button', { name: 'Quitar Descubrir' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Restablecer predeterminados' }));
@@ -25,13 +27,15 @@ describe('bottom navigation editor', () => {
   });
 });
 
-it('offers library views and a single Bookmarks entry as bottom-bar destinations', () => {
+it('offers clean collection routes and a single Bookmarks entry, migrating legacy destinations', () => {
   render(() => <BottomNavigationSettings />);
   const select = screen.getByLabelText('Posición 1');
-  for (const href of ['/library?view=songs', '/library?view=albums', '/library?view=artists', '/?saved=bookmarks']) {
+  for (const href of ['/songs', '/albums', '/artists', '/bookmarks']) {
     fireEvent.change(select, { target: { value: href } });
     expect(bottomNavigation()[0]).toBe(href);
     expect(JSON.parse(localStorage.getItem('navigation:bottom')!)[0]).toBe(href);
   }
-  expect(resolveBottomNavigation(['/', '/?saved=albums', '/?saved=artists', '/search'])).toEqual(['/', '/?saved=bookmarks', '/search']);
+  expect(resolveBottomNavigation(['/', '/?saved=albums', '/?saved=artists', '/search'])).toEqual(['/', '/bookmarks', '/search']);
+  expect(resolveBottomNavigation(['/library', '/library?view=songs', '/library?view=albums', '/library?view=artists']))
+    .toEqual(['/', '/songs', '/albums', '/artists']);
 });

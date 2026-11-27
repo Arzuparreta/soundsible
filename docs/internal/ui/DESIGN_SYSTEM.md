@@ -38,8 +38,13 @@ Artist and album detail pages are neutral: no primary navigation tab or
 sidebar entry claims them (`aria-current="page"` / `aria-pressed="true"`), and
 visiting them leaves every section's saved location and scroll state intact.
 Back returns to the originating page through browser history (or falls back to
-Library for `view=library` and Discover for `view=discover` on cold deep
-links); selecting any tab returns directly to that section's last state.
+Home `/` for `view=library` and Discover `/search` for `view=discover` on cold
+deep links). Desktop sidebar and mobile drawer entries navigate directly to each
+top-level destination root (`/`, `/songs`, `/albums`, `/artists`, `/bookmarks`,
+etc., climbing to root if already inside a subroute and scrolling to top on
+reselection); mobile tab bar entries restore only their own real subroutes
+(such as `/playlists/:name`, `/podcasts/:id`, `/settings/:section`, or
+`/bookmarks/:kind`) and never absorb Songs, Albums or Artists under Home.
 
 The URL selects the music shown and played in the detail. A library link
 opens the listener's tracks, with access to the full catalog from the scope

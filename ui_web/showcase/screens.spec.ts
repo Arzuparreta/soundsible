@@ -23,7 +23,7 @@ async function startup(page: Page, route: string) {
 }
 
 async function openPlayer(page: Page) {
-  await startup(page, '/library?view=songs');
+  await startup(page, '/songs');
   await page.locator('[data-omni-player]').getByRole('button', { name: /^NORMAL:/ }).click();
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
   await page.mouse.move(0, 0);
@@ -45,9 +45,9 @@ const SHOTS: Array<{ name: string; project: 'desktop' | 'mobile'; themes?: strin
       await settle(page, '[data-player-surface-open]');
     },
   },
-  { name: 'desktop-library', project: 'desktop', stage: (page) => startup(page, '/library?view=songs') },
+  { name: 'desktop-library', project: 'desktop', stage: (page) => startup(page, '/songs') },
   { name: 'desktop-search', project: 'desktop', stage: (page) => startup(page, '/search?q=Josh%20Woodward') },
-  { name: 'mobile-library', project: 'mobile', stage: (page) => startup(page, '/library?view=songs') },
+  { name: 'mobile-library', project: 'mobile', stage: (page) => startup(page, '/songs') },
   {
     name: 'mobile-now-playing',
     project: 'mobile',

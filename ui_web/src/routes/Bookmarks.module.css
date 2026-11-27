@@ -1,0 +1,2 @@
+.body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-md) var(--gutter) var(--space-xl); }
+.back { display: inline-flex; align-items: center; min-height: var(--control-h); margin-bottom: var(--space-md); color: var(--ink-secondary); }
