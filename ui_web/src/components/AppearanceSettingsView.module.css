@@ -1,8 +1,76 @@
 .editor {
   display: grid;
   gap: var(--space-lg);
-  padding: var(--space-lg);
+  padding: var(--space-xs) var(--settings-row-inset) var(--space-md);
 }
+
+.palettes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7.5em), 1fr));
+  gap: var(--space-sm);
+}
+
+.palette {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--ink-primary);
+  font: var(--fw-semibold) var(--text-label) var(--font-sans);
+  text-align: start;
+  cursor: pointer;
+}
+
+.palette[aria-pressed='true'] {
+  border-color: var(--accent-ink);
+  box-shadow: 0 0 0 1px var(--accent-ink);
+}
+
+.sample {
+  height: var(--space-3xl);
+  background: radial-gradient(circle at 72% 90%,
+    var(--sample-base) 0 4%, var(--sample-accent) 4.5% 20%,
+    var(--sample-base) 20.5% 23%, var(--sample-accent) 23.5% 26%,
+    var(--sample-base) 26.5% 29%, var(--sample-accent) 29.5% 32%, var(--sample-base) 32.5%);
+}
+
+.caption, .disclosure, .tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.caption { padding: var(--space-sm); }
+
+.caption svg, .disclosure svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  flex: none;
+}
+
+.disclosure {
+  min-height: var(--control-h);
+  border: 0;
+  flex: 1;
+  padding: var(--space-sm) 0;
+  background: transparent;
+  color: var(--ink-primary);
+  font: var(--fw-medium) var(--text-body) var(--font-sans);
+  text-align: start;
+  cursor: pointer;
+}
+
+.tools {
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--space-sm);
+  gap: var(--space-md);
+}
+
+.disclosure[aria-expanded='true'] svg { transform: rotate(180deg); }
 
 .fields {
   display: grid;
@@ -63,16 +131,17 @@
 .error { color: var(--danger); font-size: var(--text-caption); }
 
 .reset {
-  justify-self: end;
   padding-inline: var(--space-md);
   background: var(--bg-raised);
   font: var(--fw-semibold) var(--text-label) var(--font-sans);
   cursor: pointer;
 }
 @media (hover: hover) and (pointer: fine) {
-  .reset:hover { background: var(--bg-hover); }
+  .palette:hover, .reset:hover { background: var(--bg-hover); }
 }
 
+.palette:focus-visible,
+.disclosure:focus-visible,
 .swatch:focus-visible,
 .hex:focus-visible,
 .reset:focus-visible {
