@@ -5,7 +5,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { openPrimaryDestination } from '../lib/tabMemory';
 import { bottomNavigation } from '../lib/bottomNavigation';
 import { downloadCounts } from '../stores';
-import { navigationItems, mobileNavGroup } from './primaryNavigation';
+import { navigationItems, primaryDestination } from './primaryNavigation';
 import styles from './TabBar.module.css';
 
 export function TabBar() {
@@ -17,14 +17,11 @@ export function TabBar() {
       <For each={bottomNavigation().map(href => navigationItems.find(item => item.href === href)!)}>
         {(tab) => {
           const href = () => tab.href;
-          const selected = () => {
-            const destination = mobileNavGroup(location.pathname, location.search);
-            return destination === tab.href || (tab.href === '/' && !bottomNavigation().includes(destination) && (destination.startsWith('/library?') || destination.startsWith('/?saved=')));
-          };
+          const selected = () => primaryDestination(location.pathname) === tab.href;
           const tap = createResponsiveTap({
             onTap: (event) => {
               event.preventDefault();
-              openPrimaryDestination(navigate, href(), selected(), `${location.pathname}${location.search}`);
+              openPrimaryDestination(navigate, href(), selected(), `${location.pathname}${location.search}`, { restoreSubroute: true });
             },
           });
           return (

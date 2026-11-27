@@ -23,10 +23,10 @@ const root = resolve(import.meta.dirname, '..');
 
 /** Where each surface lives and which element proves it has rendered. */
 const SURFACES = {
-  songs: { hash: '#/library?view=songs', ready: '[data-song-row], [data-music-list-row]' },
+  songs: { hash: '#/songs', ready: '[data-song-row], [data-music-list-row]' },
   favourites: { hash: '#/favourites', ready: '[data-song-row], [data-music-list-row]' },
-  albums: { hash: '#/library?view=albums', ready: 'a[href*="/album/"]' },
-  artists: { hash: '#/library?view=artists', ready: 'a[href*="/artist/"]' },
+  albums: { hash: '#/albums', ready: 'a[href*="/album/"]' },
+  artists: { hash: '#/artists', ready: 'a[href*="/artist/"]' },
   album: { hash: `#/album/${encodeURIComponent(fixture.albums[0].title)}?artist=${encodeURIComponent(fixture.albums[0].artist.name)}&view=library&album_id=${fixture.albums[0].id}`, ready: '[data-song-row], [data-music-list-row]' },
   artist: { hash: `#/artist/${encodeURIComponent(fixture.artists[0].name)}?view=library&artist_id=${fixture.artists[0].id}`, ready: '[data-song-row], [data-music-list-row]' },
   playlist: { hash: '#/playlists/Playlist%201', ready: '[data-song-row], [data-music-list-row]' },
@@ -150,7 +150,7 @@ async function measure(name, rate) {
   const { context, page } = await open();
   let tracing = false;
   try {
-    await page.goto(`${server.origin}/player/#/library?view=songs`);
+    await page.goto(`${server.origin}/player/#/songs`);
     await page.locator(SURFACES.songs.ready).first().waitFor({ timeout: 30_000 });
     if (process.env.SCENE_CSS) await page.addStyleTag({ content: readFileSync(process.env.SCENE_CSS, 'utf8') });
     if (playing) {

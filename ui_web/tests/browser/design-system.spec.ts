@@ -4,7 +4,7 @@ import { mockMusicEngine } from './music-browser-fixture';
 /** The library's songs: the shared row, artwork and search field, as every
  * list in the app draws them. */
 async function songsView(page: Page) {
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   const list = page.locator('[data-primary-scroll]:visible').first();
   await expect(list.locator('[data-song-row], [data-music-list-row]').first()).toBeVisible();
   await page.evaluate(async () => {

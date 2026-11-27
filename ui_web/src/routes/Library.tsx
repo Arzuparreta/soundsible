@@ -2,7 +2,7 @@ import Button from '../components/Button';
 import { afterPaint } from '../lib/afterPaint';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { openAlbumBrowseMenu } from '../components/albumBrowseMenu';
-import { createEffect, createMemo, createResource, createSignal, Match, onMount, Show, Switch } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, Match, on, onMount, Show, Switch } from 'solid-js';
 import { A, useSearchParams } from '@solidjs/router';
 import { state, actions, downloadCounts, favouriteRows, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
@@ -21,8 +21,6 @@ import {
   setLibrarySort,
   libraryFilter,
   setLibraryFilter,
-  libraryTab,
-  setLibraryTab,
   sortTracks,
   filterTracks,
   catalogArtists,
@@ -46,13 +44,12 @@ import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
 import { libraryContext } from '../lib/playbackContext';
 
-/** Library view: songs (sortable, virtualized) or artists browser. */
-export default function Library() {
+export type LibraryCollectionView = 'songs' | 'albums' | 'artists';
+
+/** Collection route: songs (sortable, virtualized), albums, or artists browser. */
+export default function Library(props: { view: LibraryCollectionView }) {
+  const view = () => props.view;
   const [searchParams, setSearchParams] = useSearchParams();
-  createEffect(() => {
-    const view = searchParams.view;
-    setLibraryTab(view === 'albums' || view === 'artists' ? view : 'songs');
-  });
   const active = createMemo(() => downloadCounts().active);
   // Keyed off the resolved rows rather than library ids, so "favourites first"
   // also lifts the marked songs that have no file — they are in this list too.
@@ -65,11 +62,11 @@ export default function Library() {
   // changes. Ordering and filtering are the engine's job — it is the only party
   // that knows what "most played" or "1994" means across the whole library, and
   // paging a filtered list in the browser would mean filtering it there first.
-  const gridReady = afterPaint(libraryTab);
+  const gridReady = afterPaint(view);
   const [albumError, setAlbumError] = createSignal(false);
   const [albums, { refetch: retryAlbums }] = createResource(
     () =>
-      libraryTab() === 'albums'
+      view() === 'albums'
         ? { ...albumBrowseQuery(albumSort(), albumFilter()), revision: state.catalog.revision }
         : // Not on screen, not fetched. Switching to the tab later asks once,
           // against a catalog revision that has already settled.
@@ -84,6 +81,9 @@ export default function Library() {
   const [query, setQuerySignal] = createSignal(
     typeof searchParams.q === 'string' ? searchParams.q : '',
   );
+  createEffect(on(() => searchParams.q, (param) => {
+    setQuerySignal(typeof param === 'string' ? param : '');
+  }, { defer: true }));
   const setQuery = (next: string) => {
     setQuerySignal(next);
     setSearchParams({ q: next || undefined }, { replace: true });
@@ -155,7 +155,7 @@ export default function Library() {
     });
 
   const sortCommands = (): AppBarAction[] => {
-    const tab = libraryTab();
+    const tab = view();
     if (searching() || tab === 'artists') return [];
     const albums = tab === 'albums';
     return [{
@@ -168,20 +168,14 @@ export default function Library() {
     }];
   };
 
-  const resetLibrarySearch = () => {
-    setQuery('');
-    search.reset();
-  };
-
   return (
     <div class="view">
       <ViewHeader
-        title={t(`library.${libraryTab()}` as 'library.songs')}
+        title={t(`library.${view()}` as 'library.songs')}
         search={search}
         rendersOwnCommands
         barActions={sortCommands()}
-        onViewChange={resetLibrarySearch}
-        onTitleTap={() => reselectPrimaryTab('/library')}
+        onTitleTap={() => reselectPrimaryTab(`/${view()}`)}
         meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
         actions={
           <>
@@ -207,7 +201,7 @@ export default function Library() {
         }
       />
 
-      <Show when={!searching() && libraryTab() === 'songs' && libraryFilter() === 'downloaded'}>
+      <Show when={!searching() && view() === 'songs' && libraryFilter() === 'downloaded'}>
         <div class={styles.filterChips}>
           <button class={styles.chip} type="button" onClick={() => setLibraryFilter('all')} data-pressable>
             {t('library.filterDownloaded')} <span aria-hidden="true">×</span>
@@ -217,7 +211,7 @@ export default function Library() {
 
       {/* The narrowing stays visible and stays undoable: a grid that silently
           holds a filter from a previous session reads as a shrunken library. */}
-      <Show when={!searching() && libraryTab() === 'albums' && albumFilter().kind !== 'none'}>
+      <Show when={!searching() && view() === 'albums' && albumFilter().kind !== 'none'}>
         <div class={styles.filterChips}>
           <button
             class={styles.chip}
@@ -240,7 +234,7 @@ export default function Library() {
 
       <Show when={searching()} fallback={
         <Switch>
-          <Match when={libraryTab() === 'albums'}>
+          <Match when={view() === 'albums'}>
             <Show when={gridReady() && (!albums.loading || albumRows().length > 0)} fallback={<div class="page-loading"><SkeletonCards /></div>}>
             <Show when={!albumError()} fallback={<EmptyState tone="danger">{t('common.loadFailed')} <Button variant="secondary" onClick={() => void retryAlbums()}>{t('common.retry')}</Button></EmptyState>}>
             <Show
@@ -261,7 +255,7 @@ export default function Library() {
             </Show>
             </Show></Show>
           </Match>
-          <Match when={libraryTab() === 'artists'}>
+          <Match when={view() === 'artists'}>
             <Show when={gridReady() && !((state.loading || state.catalog.loading) && artists().length === 0)} fallback={<div class="page-loading"><SkeletonCards shape="round" /></div>}>
             <Show when={artists().length > 0} fallback={emptyState(t('library.emptyArtists'))}>
               <div

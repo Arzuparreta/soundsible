@@ -99,7 +99,7 @@ export function AppBar() {
         <div class={styles.leading}>
           <Show
             when={bar()?.back}
-            fallback={<NavigationMenuButton class={styles.icon} onViewChange={() => bar()?.onViewChange?.()} />}
+            fallback={<NavigationMenuButton class={styles.icon} />}
           >
             {(back) => (
               <button

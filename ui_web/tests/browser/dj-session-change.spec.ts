@@ -32,7 +32,7 @@ for (const language of ['es', 'en'] as const) {
       references.push(request.sources[0].tracks[0].id);
       await route.fulfill({ json: plan(request, attempts === 2 || attempts === 3) });
     });
-    await page.goto('/player/#/library?view=songs');
+    await page.goto('/player/#/songs');
     await page.getByRole('button', { name: /(?:Reproducir|Play) Canción de biblioteca 320/ }).click();
     await openMiniPlayer(page, /^NORMAL:/);
     await page.getByRole('tab', { name: 'DJ', exact: true }).click();
@@ -93,7 +93,7 @@ test('a NORMAL song menu starts DJ from that song: it comes next, and the curren
     references.push(request.sources[0].tracks[0].id);
     await route.fulfill({ json: plan(request, false) });
   });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   const selected = page.locator('[data-music-list-row], [data-song-row]').filter({
     has: page.getByRole('button', { name: /Reproducir Canción de biblioteca 319/ }),
@@ -122,7 +122,7 @@ test('an external song click starts a new DJ session immediately and its menu ca
     requests.push(request);
     await route.fulfill({ json: plan(request, false) });
   });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await openMiniPlayer(page, /^NORMAL:/);
   await page.getByRole('tab', { name: 'DJ', exact: true }).click();
@@ -158,7 +158,7 @@ test('DJ Sources header stays inside a 320px large-scale French viewport without
   await page.route('**/api/discovery/music/dj-plan', async (route) => {
     await route.fulfill({ json: plan(route.request().postDataJSON(), false) });
   });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Canción de biblioteca 320/ }).first().click();
   await openMiniPlayer(page, /^NORMAL:/);
   await page.getByRole('tab', { name: 'DJ', exact: true }).click();

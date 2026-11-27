@@ -5,7 +5,7 @@ import { dragTouch } from './playerGestures';
 test.beforeEach(async ({ page }, info) => {
   test.skip(!info.project.name.includes('mobile'));
   await mockMusicEngine(page);
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await expect(page.locator('#startup-screen')).toHaveCount(0);
 });
 
@@ -20,12 +20,21 @@ test('complete menu and independent favourites', async ({ page }, info) => {
   await expect(page.getByRole('heading', { name: 'Álbumes', exact: true })).toBeVisible();
   await nav.getByRole('link', { name: 'Favoritos', exact: true }).click();
   await expect(page).toHaveURL(/#\/favourites$/);
-  // Library comes back where it was left; tapping it again climbs to its root.
-  await nav.getByRole('link', { name: 'Biblioteca' }).click();
-  await expect(page.getByRole('heading', { name: 'Álbumes', exact: true })).toBeVisible();
-  await nav.getByRole('link', { name: 'Biblioteca' }).click();
-  await expect(page.getByRole('heading', { name: 'Biblioteca', exact: true })).toBeVisible();
+  // Home never absorbs Songs/Albums/Artists: tapping Inicio opens Home directly.
+  await nav.getByRole('link', { name: 'Inicio', exact: true }).click();
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(page.getByRole('heading', { name: 'Inicio', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Tu biblioteca' })).toBeVisible();
+  // Real subroutes still restore on the mobile tab bar and climb on re-tap.
+  await nav.getByRole('link', { name: 'Ajustes', exact: true }).click();
+  await page.getByRole('button', { name: /Accesibilidad/ }).click();
+  await expect(page).toHaveURL(/#\/settings\/accessibility$/);
+  await nav.getByRole('link', { name: 'Favoritos', exact: true }).click();
+  await expect(page).toHaveURL(/#\/favourites$/);
+  await nav.getByRole('link', { name: 'Ajustes', exact: true }).click();
+  await expect(page).toHaveURL(/#\/settings\/accessibility$/);
+  await nav.getByRole('link', { name: 'Ajustes', exact: true }).click();
+  await expect(page).toHaveURL(/#\/settings$/);
 });
 
 test('drawer closes on Back and Escape and restores focus', async ({ page }) => {
@@ -43,7 +52,7 @@ test('drawer closes on Back and Escape and restores focus', async ({ page }) => 
   await page.getByRole('dialog').getByRole('link', { name: 'Descargas', exact: true }).click();
   await expect(page).toHaveURL(/#\/downloads$/);
   await page.goBack();
-  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await expect(page).toHaveURL(/#\/songs$/);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
@@ -61,7 +70,7 @@ test('custom bar persists and settings remain accessible after removal', async (
   await page.screenshot({ animations: 'disabled', path: info.outputPath('navigation-editor.png') });
   await page.reload();
   await expect(nav.getByRole('link')).toHaveCount(5);
-  await nav.getByRole('link', { name: 'Biblioteca' }).click();
+  await nav.getByRole('link', { name: 'Inicio' }).click();
   await page.getByRole('button', { name: 'Menú', exact: true }).click();
   await page.getByRole('dialog').getByRole('link', { name: 'Ajustes' }).click();
   await page.getByRole('button', { name: /Accesibilidad/ }).click();
@@ -176,6 +185,6 @@ test('the drawer closes when it is dragged back off the edge it came from', asyn
   await expect(page.getByRole('dialog')).toHaveCount(0);
   // Closed through the overlay's own handle, so the history entry it pushed was
   // consumed rather than left behind for the next Back to trip over.
-  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await expect(page).toHaveURL(/#\/songs$/);
   await expect(menu).toBeFocused();
 });

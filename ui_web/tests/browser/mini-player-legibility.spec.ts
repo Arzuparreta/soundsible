@@ -103,7 +103,7 @@ test('entity rows never read through the mini-player', async ({ page }) => {
 
 test('the last library row clears the floating mini-player with the name in the mobile header', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'the floating pill is the compact layout');
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción 39/ }).click();
 
   const pill = page.locator('[data-omni-player]');

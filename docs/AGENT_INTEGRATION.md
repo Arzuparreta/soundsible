@@ -363,12 +363,17 @@ removes saved songs or downloads.
 Failed persistence returns an error without discarding the previous collection;
 instance backups include the account's `saved_entities.json` automatically.
 
-The web Library root (`#/`, also `#/library`) contains collection shortcuts and
-pinned bookmark rows (artists first, then albums). Songs, albums and artists open at
-`#/library?view=songs|albums|artists`; bookmarks open at `#/?saved=bookmarks`
-(or filtered by kind at `#/?saved=artists|albums`). All of these subentries are
+The web Home root (`#/`, with legacy `#/library` redirecting) contains collection shortcuts and
+pinned bookmark rows (artists first, then albums). Songs, albums and artists are
+independent top-level destinations at `#/songs`, `#/albums` and `#/artists`
+(with legacy `#/library?view=songs|albums|artists` redirecting); bookmarks open at
+`#/bookmarks` (or filtered by kind at `#/bookmarks/artists` and `#/bookmarks/albums`,
+with legacy `#/?saved=bookmarks|artists|albums` redirecting). All of these entries are
 selectable in the bottom bar settings, with Bookmarks as a single destination.
-Selecting Library itself always returns to its root. The NORMAL/DJ browser retains
+Selecting an item in the desktop sidebar or drawer navigates directly to that
+destination; in the mobile bottom bar, inactive tabs restore only their own real
+subroutes (such as a playlist, podcast show, settings section, or filtered bookmarks)
+and never absorb Songs, Albums or Artists into Home. The NORMAL/DJ browser retains
 its existing sections, with an additional Saved section. On desktop, the sidebar
 subentries switch between songs, albums and artists; the library search sits below
 the title beside the sorting control.

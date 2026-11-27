@@ -46,7 +46,7 @@ test('switching an open NORMAL player to DJ needs no UI download after a station
 
 test('a failed first DJ UI load offers recovery while the current song keeps playing', async ({ page }) => {
   await mockMusicEngine(page);
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await expect.poll(async () => (await position(page)).position).toBeGreaterThan(0);
   const before = await position(page);

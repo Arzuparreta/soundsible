@@ -42,6 +42,15 @@ describe('on-demand dictionaries', () => {
       expect(locale()).toBe(code);
       // A loaded dictionary answers a known key with a real string, not the key.
       expect(t('nav.library')).not.toBe('nav.library');
+      expect(t('nav.home')).not.toBe('nav.home');
+    }
+  });
+
+  it('localizes nav.home across all locales', async () => {
+    const expected: Record<string, string> = { en: 'Home', es: 'Inicio', fr: 'Accueil', zh: '首页' };
+    for (const { code } of LOCALES) {
+      await setLocale(code);
+      expect(t('nav.home')).toBe(expected[code]);
     }
   });
 

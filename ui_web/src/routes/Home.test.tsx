@@ -4,7 +4,7 @@ import { onCleanup } from 'solid-js';
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { Router, Route } from '@solidjs/router';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
-import LibraryHome from './LibraryHome';
+import Home from './Home';
 import { api } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { newReleasesApi } from '../lib/newReleasesApi';
@@ -21,11 +21,21 @@ beforeEach(() => {
   vi.spyOn(newReleasesApi, 'getDiscoveryNewReleases').mockResolvedValue({ items: [], revalidating: false });
 });
 afterEach(() => vi.restoreAllMocks());
-const show = () => render(() => <Router root={props => { onCleanup(registerMusicNavigator(useNavigate())); return props.children; }}><Route path="/" component={LibraryHome} /></Router>);
-it('has library shortcuts and pinned artist-then-album rows, with reloadable bookmark routes', async () => {
+
+const show = () => render(() => (
+  <Router root={props => { onCleanup(registerMusicNavigator(useNavigate())); return props.children; }}>
+    <Route path="/" component={Home} />
+    <Route path="/bookmarks" component={() => <p>Bookmarks page</p>} />
+    <Route path="/bookmarks/albums" component={() => <p>Bookmarks albums page</p>} />
+    <Route path="/bookmarks/artists" component={() => <p>Bookmarks artists page</p>} />
+  </Router>
+));
+
+it('links collection shortcuts directly and navigates See all to dedicated bookmark routes', async () => {
   show();
-  expect(screen.getByRole('link', { name: 'Albums' })).toHaveAttribute('href', '#/library?view=albums');
-  expect(screen.getByRole('link', { name: 'Artists' })).toHaveAttribute('href', '#/library?view=artists');
+  expect(screen.getByRole('link', { name: 'Songs' })).toHaveAttribute('href', '#/songs');
+  expect(screen.getByRole('link', { name: 'Albums' })).toHaveAttribute('href', '#/albums');
+  expect(screen.getByRole('link', { name: 'Artists' })).toHaveAttribute('href', '#/artists');
   await screen.findByRole('link', { name: 'Record' });
   const artistsSection = screen.getByRole('region', { name: 'Artists' });
   const albumsSection = screen.getByRole('region', { name: 'Albums' });
@@ -33,21 +43,19 @@ it('has library shortcuts and pinned artist-then-album rows, with reloadable boo
   expect(artistsSection.querySelector('h2 svg')).not.toBeNull();
   expect(albumsSection.querySelector('h2 svg')).not.toBeNull();
   fireEvent.click(screen.getByRole('link', { name: 'See all: Albums' }));
-  await waitFor(() => expect(window.location.search).toBe('?saved=albums'));
-  expect(screen.queryByRole('region', { name: 'Your library' })).toBeNull();
-  expect(screen.queryByRole('region', { name: 'Artists' })).toBeNull();
-  expect(screen.getByRole('link', { name: /Back to Library/ })).toBeInTheDocument();
+  await screen.findByText('Bookmarks albums page');
+  expect(window.location.pathname).toBe('/bookmarks/albums');
 });
 
-it('shows both artists and albums in the unified Bookmarks route', async () => {
-  window.history.replaceState({}, '', '/?saved=bookmarks');
+it.each([
+  ['/?saved=bookmarks', '/bookmarks', 'Bookmarks page'],
+  ['/?saved=albums', '/bookmarks/albums', 'Bookmarks albums page'],
+  ['/?saved=artists', '/bookmarks/artists', 'Bookmarks artists page'],
+])('redirects legacy %s to %s', async (legacy, target, marker) => {
+  window.history.replaceState({}, '', legacy);
   show();
-  await screen.findByRole('link', { name: 'Record' });
-  expect(screen.queryByRole('region', { name: 'Your library' })).toBeNull();
-  const artistsSection = screen.getByRole('region', { name: 'Artists' });
-  const albumsSection = screen.getByRole('region', { name: 'Albums' });
-  expect(artistsSection.compareDocumentPosition(albumsSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.getByRole('link', { name: /Back to Library/ })).toBeInTheDocument();
+  await screen.findByText(marker);
+  expect(window.location.pathname).toBe(target);
 });
 
 it('hides both saved rows when the collection is empty', async () => {
@@ -58,9 +66,8 @@ it('hides both saved rows when the collection is empty', async () => {
   expect(screen.queryByRole('region', { name: 'Artists' })).toBeNull();
   expect(screen.queryByText('Bookmark an album or artist from its page to find it here.')).toBeNull();
 });
+
 it('says once that the saved collection could not load, and retries it', async () => {
-  // The root used to drop a failed read silently, which reads as "nothing
-  // bookmarked". One line covers both rows, never one per kind.
   vi.mocked(api.getSavedEntities).mockRejectedValueOnce(new Error('unavailable'));
   show();
   const retry = await screen.findByRole('button', { name: 'Retry' });

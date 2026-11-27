@@ -16,10 +16,10 @@ describe('saved entities', () => {
     expect(sameEntity(album('1'), album('2'))).toBe(false);
     expect(sameEntity(album('1'), { ...album('1'), destination: '/album/Greatest%20Hits' })).toBe(false);
   });
-  it('points at Library when a save lands, and only then', async () => {
+  it('points at Home and Bookmarks when a save lands, and only then', async () => {
     vi.mocked(api.setSavedEntity).mockResolvedValue([album('1')]);
     await setEntitySaved(album('1'), true);
-    expect(pulseNavigation).toHaveBeenCalledWith(['/', '/?saved=bookmarks']);
+    expect(pulseNavigation).toHaveBeenCalledWith(['/', '/bookmarks']);
     expect(toast.action).not.toHaveBeenCalled();
     vi.mocked(pulseNavigation).mockClear();
     vi.mocked(api.setSavedEntity).mockResolvedValue([]);

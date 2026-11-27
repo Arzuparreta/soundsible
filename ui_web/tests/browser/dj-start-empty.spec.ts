@@ -30,7 +30,7 @@ test('starting DJ with nothing playing lets the DJ choose the first song and pla
     } });
   });
 
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await expect(page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ })).toBeVisible();
   const pill = page.locator('[data-omni-player]');
   await expect(pill).toContainText('Empezar una sesión de DJ');

@@ -63,7 +63,7 @@ test('the playing song in the queue answers a click on its equaliser', async ({ 
   // The wide queue row, with its equaliser, is the full-screen player's; the
   // docked column lists the queue with the phone's rows.
   await fullScreenPlayer(page);
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await openMiniPlayer(page, /Canción de biblioteca 320/);
   const queue = page.locator('[data-now-playing-tile="queue"]');

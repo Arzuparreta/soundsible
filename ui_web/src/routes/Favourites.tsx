@@ -87,7 +87,7 @@ export default function Favourites() {
           <EmptyState>
             <p>{t('favourites.empty')}</p>
             {/* The hearts are given in the library, so that is the way on. */}
-            <A href="/library" class={`${button.btn} ${button.secondary} ${button.sm} ${styles.link}`}>{t('nav.library')}</A>
+            <A href="/songs" class={`${button.btn} ${button.secondary} ${button.sm} ${styles.link}`}>{t('library.songs')}</A>
           </EmptyState>
         </CollectionEmpty>}
       />

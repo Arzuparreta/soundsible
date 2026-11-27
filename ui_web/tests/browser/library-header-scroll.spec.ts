@@ -66,7 +66,7 @@ test('tapping the library title returns a scrolled track list to the top', async
     localStorage.clear();
     localStorage.setItem('lang', 'en');
   });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
 
   const heading = page.locator(isMobile ? '[data-app-bar]' : '[data-page-indicator]').getByRole('button', { name: 'Songs' });
   await expect(heading).toBeVisible();
@@ -88,7 +88,7 @@ test('desktop library search sits above the content and view changes use the sid
   test.skip(page.viewportSize()!.width < 1024, 'Desktop layout');
   await mockEngine(page);
   await page.addInitScript(() => localStorage.setItem('lang', 'en'));
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   const heading = page.locator('[data-page-indicator]').filter({ hasText: 'Songs' });
   const search = page.getByRole('searchbox', { name: 'Search songs and artists' });
   await expect(search).toBeVisible();
@@ -98,7 +98,7 @@ test('desktop library search sits above the content and view changes use the sid
   for (const name of ['Songs', 'Albums', 'Artists']) {
     await expect(page.locator('[data-app-outlet]').getByRole('button', { name, exact: true })).toHaveCount(0);
     await page.locator('aside').getByRole('link', { name, exact: true }).click();
-    await expect(page).toHaveURL(new RegExp('view=' + name.toLowerCase() + '$'));
+    await expect(page).toHaveURL(new RegExp('#/' + name.toLowerCase() + '$'));
     await expect(search).toBeVisible();
   }
 });

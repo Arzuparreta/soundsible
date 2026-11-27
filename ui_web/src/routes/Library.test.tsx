@@ -1,8 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import Library from './Library';
-import { setLibraryTab } from '../lib/libraryView';
+import Library, { type LibraryCollectionView } from './Library';
 import { setState } from '../stores/core';
 import { api } from '../lib/api';
 import { setLocale } from '../lib/i18n';
@@ -21,14 +20,15 @@ beforeEach(() => {
   setState('catalog', { artists: [], loading: false, ready: true });
 });
 afterEach(() => vi.restoreAllMocks());
-const show = () => render(() => <Router><Route path="/" component={Library} /></Router>);
+const show = (view: LibraryCollectionView) => render(() => (
+  <Router><Route path="*" component={() => <Library view={view} />} /></Router>
+));
 
 describe('library initial feedback', () => {
   it('shows artist placeholders until the catalog arrives, never a false empty state', async () => {
-    window.history.replaceState({}, '', '/?view=artists');
-    setLibraryTab('artists');
+    window.history.replaceState({}, '', '/artists');
     setState('catalog', 'loading', true);
-    show();
+    show('artists');
     expect(screen.getByRole('status')).toBeInTheDocument();
     expect(screen.queryByText('Artist grid')).toBeNull();
     setState('catalog', { loading: false, artists: [{ id: 'a', name: 'Artist', track_count: 1, album_count: 1, cover_track_id: 'track' }] });
@@ -39,9 +39,8 @@ describe('library initial feedback', () => {
   it('shows album placeholders while pending and offers retry on failure', async () => {
     let reject!: (error: Error) => void;
     const request = vi.spyOn(api, 'getLibraryAlbums').mockImplementationOnce(() => new Promise<CatalogAlbum[]>((_yes, no) => { reject = no; })).mockResolvedValue([]);
-    window.history.replaceState({}, '', '/?view=albums');
-    setLibraryTab('albums');
-    show();
+    window.history.replaceState({}, '', '/albums');
+    show('albums');
     expect(screen.getByRole('status')).toBeInTheDocument();
     reject(new Error('offline'));
     const retry = await screen.findByRole('button', { name: 'Retry' });

@@ -9,12 +9,12 @@ vi.mock('@solidjs/router', () => ({
 vi.mock('../lib/appBar', () => ({ useAppBar: vi.fn() }));
 
 describe('Unknown address', () => {
-  it('names the problem and leads back to the library and Discover, with no demo', () => {
+  it('names the problem and leads back to Home and Discover, with no demo', () => {
     setLocale('en');
     render(() => <Placeholder title={t('placeholder.notFoundTitle')} blurb={t('placeholder.notFoundBlurb')} />);
 
     expect(screen.getByRole('heading', { level: 1, name: 'Not found' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Library' })).toHaveAttribute('href', '/library');
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Discover' })).toHaveAttribute('href', '/search');
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.queryByText(/overlay/i)).toBeNull();

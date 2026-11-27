@@ -1,9 +1,32 @@
-import { Show, onMount, onCleanup } from 'solid-js';
+import { createEffect, onMount, onCleanup } from 'solid-js';
 import { HashRouter, Route, useNavigate, useSearchParams } from '@solidjs/router';
 import Shell from './app';
 import { asyncPage } from './components/AsyncPage';
-import LibraryHome from './routes/LibraryHome';
-const Library = asyncPage(() => import('./routes/Library'), () => t('nav.library'));
+
+const Home = asyncPage(() => import('./routes/Home'), () => t('nav.home'), 'cards');
+
+const collectionPage = (
+  view: 'songs' | 'albums' | 'artists',
+  titleKey: 'library.songs' | 'library.albums' | 'library.artists',
+  shape: 'rows' | 'cards' = 'cards',
+) => asyncPage(
+  () => import('./routes/Library').then((m) => ({ default: () => <m.default view={view} /> })),
+  () => t(titleKey),
+  shape,
+);
+
+const bookmarkPage = (kind?: 'album' | 'artist') => asyncPage(
+  () => import('./routes/Bookmarks').then((m) => ({ default: () => <m.default kind={kind} /> })),
+  () => t(kind === 'album' ? 'savedEntities.albums' : kind === 'artist' ? 'savedEntities.artists' : 'savedEntities.title'),
+  'cards',
+);
+
+const Songs = collectionPage('songs', 'library.songs', 'rows');
+const Albums = collectionPage('albums', 'library.albums');
+const Artists = collectionPage('artists', 'library.artists');
+const Bookmarks = bookmarkPage();
+const BookmarksAlbums = bookmarkPage('album');
+const BookmarksArtists = bookmarkPage('artist');
 
 const Favourites = asyncPage(() => import('./routes/Favourites'), () => t('favourites.title'));
 const Settings = asyncPage(() => import('./routes/Settings'), () => t('settings.title'));
@@ -24,22 +47,43 @@ const Placeholder = asyncPage(() =>
 );
 import { initStore, disposeStore } from './stores';
 import { t } from './lib/i18n';
+
 function DiscoverRedirect() {
   const navigate = useNavigate();
   onMount(() => navigate('/search', { replace: true }));
   return <Search />;
 }
 
-function LibraryRoute() {
+function LegacyLibraryRedirect() {
+  const navigate = useNavigate();
   const [params] = useSearchParams();
-  return <Show when={['songs', 'albums', 'artists'].includes(String(params.view))} fallback={<LibraryHome />}><Library /></Show>;
+  const target = () => {
+    const view = String(params.view ?? '');
+    const rest = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (key === 'view' || value == null) continue;
+      if (Array.isArray(value)) value.forEach((entry) => rest.append(key, entry));
+      else rest.set(key, String(value));
+    }
+    const base = view === 'songs' || view === 'albums' || view === 'artists' ? `/${view}` : '/';
+    const query = rest.toString();
+    return query ? `${base}?${query}` : base;
+  };
+  createEffect(() => navigate(target(), { replace: true }));
+  return null;
 }
 
 function Player() {
   return (
     <HashRouter root={Shell}>
-      <Route path="/" component={LibraryHome} />
-      <Route path="/library" component={LibraryRoute} />
+      <Route path="/" component={Home} />
+      <Route path="/songs" component={Songs} />
+      <Route path="/albums" component={Albums} />
+      <Route path="/artists" component={Artists} />
+      <Route path="/bookmarks" component={Bookmarks} />
+      <Route path="/bookmarks/albums" component={BookmarksAlbums} />
+      <Route path="/bookmarks/artists" component={BookmarksArtists} />
+      <Route path="/library" component={LegacyLibraryRedirect} />
       <Route path="/favourites" component={Favourites} />
       <Route path="/search" component={Search} />
       <Route path="/settings" component={Settings} />

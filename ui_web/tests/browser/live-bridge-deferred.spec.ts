@@ -19,7 +19,7 @@ const liveModules = (page: Page) => {
 test('a session that never opens Live does not load the broadcast bridge', async ({ page }) => {
   const seen = liveModules(page);
   await mockMusicEngine(page);
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await expect(page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ })).toBeVisible();
   await page.waitForLoadState('networkidle');
   expect(seen).toEqual([]);
@@ -29,6 +29,6 @@ test('a stored hosted room loads the bridge at boot so the broadcast can resume'
   const seen = liveModules(page);
   await mockMusicEngine(page);
   await page.addInitScript(() => localStorage.setItem('community:active-host:v1', 'room-1'));
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await expect.poll(() => seen.some((path) => path.includes('CommunityBridge'))).toBe(true);
 });

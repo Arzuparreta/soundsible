@@ -331,7 +331,7 @@ export default function Artist() {
 
   const back = () => navigateBackOr(
     navigate,
-    view() === 'library' ? (tabRoot('/') ?? '/') : (tabRoot('/search') ?? '/search'),
+    view() === 'library' ? '/' : (tabRoot('/search') ?? '/search'),
   );
   let openCollectionMenu = () => {};
   const search = createCollectionSearch();

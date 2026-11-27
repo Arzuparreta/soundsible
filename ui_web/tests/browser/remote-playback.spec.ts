@@ -16,7 +16,7 @@ for (const keys of [['yt:dQw4w9WgXcQ'], ['deezer:42']]) {
     page.on('request', request => {
       if (/\/api\/preview\/stream/.test(request.url()) || /\/api\/downloader\/queue/.test(request.url()) && request.method() === 'POST') acquired.push(request.url());
     });
-    await page.goto('/player/#/library?view=songs');
+    await page.goto('/player/#/songs');
     const row = page.locator('[data-music-list-row], [data-song-row]').filter({ hasText: 'Canción remota' });
     await row.getByRole('button', { name: /^Más opciones/ }).click();
     await page.getByText('Reproducir en dispositivo', { exact: true }).click();
@@ -152,7 +152,7 @@ test('connected mode: device sheet, controlling remote playback, capability hidi
   await page.getByRole('button', { name: 'Dispositivos de reproducción' }).click();
   await expect(sheet.getByRole('radio', { name: /Este dispositivo/ })).toHaveAttribute('aria-checked', 'true');
   await sheet.getByRole('radio', { name: /Altavoz Salón/ }).click();
-  await page.evaluate(() => { window.location.hash = '/library?view=songs'; });
+  await page.evaluate(() => { window.location.hash = '/songs'; });
   const omni = page.locator('[data-omni-player]');
   await expect(omni).toContainText('Pista 1');
   await expect(omni).toContainText('Altavoz Salón');
@@ -271,7 +271,7 @@ test('a fresh player stays local and can copy a remote track without sending a c
   });
   await stubSocketIo(page, () => ({ device: remote, state: null }));
 
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   const firstLocalStream = page.waitForRequest('**/api/static/stream/library-track-320**');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await firstLocalStream;

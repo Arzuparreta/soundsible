@@ -53,8 +53,6 @@ export interface AppBarConfig {
   heading?: () => HTMLElement | undefined;
   /** Tapping the title. Defaults to returning the page to its top. */
   onTitleTap?: () => void;
-  /** The navigation drawer switched library views on the page's behalf. */
-  onViewChange?: () => void;
 }
 
 const [stack, setStack] = createSignal<readonly AppBarConfig[]>([]);

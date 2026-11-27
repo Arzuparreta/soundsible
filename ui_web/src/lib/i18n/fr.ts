@@ -28,7 +28,7 @@ export const fr: Dict = {
   savedEntities: {
     albums: "Albums",
     artists: "Artistes",
-    back: "Retour à la bibliothèque",
+    back: "Retour à l’accueil",
     inLibrary: "Dans votre bibliothèque",
     library: "Votre bibliothèque",
 
@@ -123,6 +123,7 @@ export const fr: Dict = {
     live: 'Live',
     downloads: 'Téléchargements',
     settings: 'Réglages',
+    home: 'Accueil',
     library: 'Bibliothèque',
     collection: 'Collection',
     collapseSidebar: 'Réduire la barre latérale',

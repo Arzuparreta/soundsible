@@ -4,39 +4,24 @@ import { openPrimaryDestination } from '../lib/tabMemory';
 import { t } from '../lib/i18n';
 import { openOverlay } from '../lib/overlay';
 import { desktopShell } from '../lib/shellLayout';
-import { setLibraryTab } from '../lib/libraryView';
 import { downloadCounts } from '../stores';
 import { CloseIcon, MenuIcon } from './icons';
-import { navigationGroups, navigationItems, mobileNavGroup, type NavigationGroup } from './primaryNavigation';
+import { navigationGroups, navigationItems, primaryDestination, type NavigationGroup } from './primaryNavigation';
 import styles from './NavigationMenu.module.css';
 
-const LIBRARY_VIEW_PREFIX = '/library?view=';
 const mainGroups = navigationGroups.filter((group) => !group.footer);
 const footerGroups = navigationGroups.filter((group) => group.footer);
 
-function libraryViewOf(href: string): string | undefined {
-  return href.startsWith(LIBRARY_VIEW_PREFIX) ? href.slice(LIBRARY_VIEW_PREFIX.length) : undefined;
-}
-
-/**
- * Which entry is the current page. Exactly one entry announces it: a Library
- * view owns it while it is open, and Library itself only when no view below it
- * does. `inside` keeps Library's "climb to root" return behaviour alive without
- * lighting up a second row in the sidebar.
- */
-export function navigationCurrent(path: string, search = ''): { href: string; inside?: string } {
-  const href = mobileNavGroup(path, search);
-  if (href.startsWith(LIBRARY_VIEW_PREFIX)) return { href, inside: '/' };
-  // Saved albums and artists are sections of the Library page, with no entry.
-  if (href.startsWith('/?saved=')) return { href: '/' };
-  return { href };
+/** Which navigation entry owns the active route, or `''` for neutral entity views. */
+export function navigationCurrent(path: string): string {
+  return primaryDestination(path);
 }
 
 function GroupSection(props: {
   group: NavigationGroup;
   collapsed?: boolean;
-  current: () => { href: string; inside?: string };
-  select: (href: string, view: string | undefined, selected: boolean) => void;
+  current: () => string;
+  select: (href: string, selected: boolean) => void;
 }) {
   return (
     <section
@@ -52,10 +37,7 @@ function GroupSection(props: {
         <For each={props.group.hrefs}>
           {(href) => {
             const item = navigationItems.find((entry) => entry.href === href)!;
-            const view = libraryViewOf(href);
-            const isCurrent = () => props.current().href === href;
-            // Re-selecting Library from any of its views climbs back to `/`.
-            const selected = () => isCurrent() || props.current().inside === href;
+            const isCurrent = () => props.current() === href;
             const hasDownloads = () => href === '/downloads' && downloadCounts().active > 0;
             return (
               <a
@@ -71,7 +53,7 @@ function GroupSection(props: {
                 title={props.collapsed ? item.label() : undefined}
                 onClick={(event) => {
                   event.preventDefault();
-                  props.select(href, view, selected());
+                  props.select(href, isCurrent());
                 }}
               >
                 <span class={styles.icon}>{item.icon()}</span>
@@ -99,19 +81,16 @@ export function NavigationLinks(props: {
   collapsed?: boolean;
   desktop?: boolean;
   navigate: Navigator;
-  onSelect?: (go: () => void, view: string | undefined) => void;
+  onSelect?: (go: () => void) => void;
 }) {
-  const current = () => navigationCurrent(props.path, props.search);
-  const select = (href: string, view: string | undefined, selected: boolean) => {
+  const current = () => navigationCurrent(props.path);
+  const select = (href: string, selected: boolean) => {
     const go = () => {
-      if (view) {
-        setLibraryTab(view);
-        props.navigate(href);
-      } else {
-        openPrimaryDestination(props.navigate, href, selected, `${props.path}${props.search ?? ''}`);
-      }
+      openPrimaryDestination(props.navigate, href, selected, `${props.path}${props.search ?? ''}`, {
+        restoreSubroute: false,
+      });
     };
-    if (props.onSelect) props.onSelect(go, view);
+    if (props.onSelect) props.onSelect(go);
     else go();
   };
 
@@ -151,7 +130,6 @@ function Drawer(props: {
   search: () => string;
   close: (after?: () => void) => void;
   navigate: Navigator;
-  onViewChange?: () => void;
 }) {
   createEffect(() => { if (desktopShell()) props.close(); });
   // Overlay lives outside the app root, so background controls cannot receive focus.
@@ -171,16 +149,13 @@ function Drawer(props: {
         path={props.path()}
         search={props.search()}
         navigate={props.navigate}
-        onSelect={(go, view) => props.close(() => {
-          if (view) props.onViewChange?.();
-          go();
-        })}
+        onSelect={(go) => props.close(go)}
       />
     </div>
   );
 }
 
-export function NavigationMenuButton(props: { onViewChange?: () => void; class?: string } = {}) {
+export function NavigationMenuButton(props: { class?: string } = {}) {
   const location = useLocation();
   const navigate = useNavigate();
   return (
@@ -200,7 +175,6 @@ export function NavigationMenuButton(props: { onViewChange?: () => void; class?:
                 search={() => location.search}
                 close={close}
                 navigate={navigate}
-                onViewChange={props.onViewChange}
               />
             ),
             { variant: 'drawer', history: true, ariaLabel: () => t('nav.menu') },

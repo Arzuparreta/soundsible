@@ -39,7 +39,7 @@ test('cached search returns fully painted without re-querying or fading', async 
     return element.scrollTop;
   });
   expect(savedTop).toBeGreaterThan(0);
-  await page.evaluate(() => { location.hash = '/library'; });
+  await page.evaluate(() => { location.hash = '/'; });
   await expect(page.getByRole('searchbox')).toHaveCount(0);
   const frames = await observeReturn(page);
   expect(frames.length).toBeGreaterThan(0);

@@ -7,7 +7,7 @@ import styles from './Placeholder.module.css';
 
 /**
  * The page for an address no route answers. It says so and offers the two
- * places a listener most likely meant to be: their library and Discover.
+ * places a listener most likely meant to be: Home and Discover.
  */
 export function Placeholder(props: { title: string; blurb?: string }) {
   const [heading, setHeading] = createSignal<HTMLElement>();
@@ -20,7 +20,7 @@ export function Placeholder(props: { title: string; blurb?: string }) {
         <p class={styles.blurb}>{props.blurb}</p>
       </Show>
       <div class={styles.actions}>
-        <A href="/library" class={`${button.btn} ${button.primary} ${button.md}`}>{t('nav.library')}</A>
+        <A href="/" class={`${button.btn} ${button.primary} ${button.md}`}>{t('nav.home')}</A>
         <A href="/search" class={`${button.btn} ${button.secondary} ${button.md}`}>{t('nav.search')}</A>
       </div>
     </section>

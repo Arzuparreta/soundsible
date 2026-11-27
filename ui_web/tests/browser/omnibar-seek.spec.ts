@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
       headers: { 'Accept-Ranges': 'bytes', ...(match ? { 'Content-Range': `bytes ${start}-${end}/${fixtureWav.length}` } : {}) },
       body: fixtureWav.subarray(start, end + 1) });
   });
-  await page.goto('/player/#/library?view=songs');
+  await page.goto('/player/#/songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await expect(page.locator('[data-omni-seek] input')).toBeEnabled();
   await expect.poll(() => page.evaluate(async () => {

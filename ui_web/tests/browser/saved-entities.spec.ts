@@ -112,7 +112,7 @@ test('small viewport keeps the collection usable and can leave it after removing
   await saved.getByRole('button', { name: 'Opciones: Radiohead', exact: true }).click();
   await page.locator('button').filter({ hasText: /^Quitar de marcadores/ }).click();
   await expect(saved.getByRole('link')).toHaveCount(0);
-  await page.getByRole('link', { name: /Volver a Biblioteca/ }).click();
+  await page.getByRole('link', { name: /Volver a Inicio/ }).click();
   await expect(page.getByRole('region', { name: 'Tu biblioteca', exact: true })).toBeVisible();
   await expect(saved).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Reintentar', exact: true })).toHaveCount(0);
@@ -120,17 +120,16 @@ test('small viewport keeps the collection usable and can leave it after removing
   await expect(page.getByText('Canción de biblioteca 320', { exact: true })).toBeVisible();
 });
 
-test('Library opens its root and every subentry can be pinned to the bottom bar', async ({ page }, info) => {
+test('Home opens its root and every collection destination can be pinned to the bottom bar', async ({ page }, info) => {
   await mockMusicEngine(page);
   await page.goto('/player/#/');
   const shortcuts = page.getByRole('region', { name: 'Tu biblioteca', exact: true });
   await expect(shortcuts).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Inicio', exact: true })).toHaveCount(0);
   await expect(page.locator('[data-library-scroll]')).toHaveCount(0);
   await shortcuts.getByRole('link', { name: 'Canciones', exact: true }).click();
-  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await expect(page).toHaveURL(/#\/songs$/);
   await expect(page.getByText('Canción de biblioteca 320', { exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Biblioteca', exact: true }).filter({ visible: true }).click();
+  await page.getByRole('link', { name: 'Inicio', exact: true }).filter({ visible: true }).click();
   await expect(shortcuts).toBeVisible();
   await expect(page.locator('[data-library-scroll]')).toHaveCount(0);
   expect((await new AxeBuilder({ page }).include('main').analyze()).violations).toEqual([]);
@@ -138,14 +137,14 @@ test('Library opens its root and every subentry can be pinned to the bottom bar'
 
   await page.goto('/player/#/settings/accessibility');
   await page.locator('summary').filter({ hasText: 'Barra inferior' }).click();
-  const paths = ['/library?view=songs', '/library?view=albums', '/library?view=artists', '/?saved=bookmarks'];
+  const paths = ['/songs', '/albums', '/artists', '/bookmarks'];
   for (const path of paths) await expect(page.getByLabel('Posición 1').locator(`option[value="${path}"]`)).toHaveCount(1);
-  await expect(page.getByLabel('Posición 1').locator('option[value="/?saved=albums"]')).toHaveCount(0);
-  await expect(page.getByLabel('Posición 1').locator('option[value="/?saved=artists"]')).toHaveCount(0);
-  await page.getByLabel('Posición 1').selectOption('/library?view=songs');
-  await page.getByLabel('Posición 2').selectOption('/library?view=albums');
-  await page.getByLabel('Posición 3').selectOption('/library?view=artists');
-  await page.getByLabel('Posición 4').selectOption('/?saved=bookmarks');
+  await expect(page.getByLabel('Posición 1').locator('option[value="/bookmarks/albums"]')).toHaveCount(0);
+  await expect(page.getByLabel('Posición 1').locator('option[value="/bookmarks/artists"]')).toHaveCount(0);
+  await page.getByLabel('Posición 1').selectOption('/songs');
+  await page.getByLabel('Posición 2').selectOption('/albums');
+  await page.getByLabel('Posición 3').selectOption('/artists');
+  await page.getByLabel('Posición 4').selectOption('/bookmarks');
   await page.reload();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('navigation:bottom')!))).toEqual(paths);
   if (info.project.name.includes('mobile')) {
@@ -174,7 +173,7 @@ test('every saved card is the same size, whatever the length of its name', async
     await expect.poll(() => coverSizes(region)).toHaveLength(4);
     expect(new Set(await coverSizes(region)).size, region).toBe(1);
   }
-  await page.goto('/player/#/?saved=artists');
+  await page.goto('/player/#/bookmarks/artists');
   await expect.poll(() => coverSizes('Artistas')).toHaveLength(4);
   expect(new Set(await coverSizes('Artistas')).size).toBe(1);
 });
@@ -184,11 +183,11 @@ test('a compatibility-normalized saved match suppresses the Library empty state'
   await page.route('**/api/library/saved-entities', route => route.fulfill({ json: { entities: [
     { kind: 'album', name: 'Oﬃce', artist: 'Björk', destination: '/album/Office?artist=Bjork&deezer_id=1' },
   ] } }));
-  await page.goto('/player/#/library?view=songs&q=office');
+  await page.goto('/player/#/songs?q=office');
   await expect(page.getByRole('link', { name: 'Oﬃce', exact: true })).toBeVisible();
   await expect(page.getByText('No hay canciones ni artistas que coincidan.')).toHaveCount(0);
 
-  await page.goto('/player/#/?saved=albums');
+  await page.goto('/player/#/bookmarks/albums');
   const field = page.getByRole('searchbox', { name: 'Filtrar esta lista' });
   if (isMobile) {
     await expect(field).toHaveCount(0);

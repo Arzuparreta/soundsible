@@ -1,14 +1,14 @@
 import type { Navigator } from '@solidjs/router';
-import { mobileNavGroup } from '../components/primaryNavigation';
-import { bottomNavigation } from './bottomNavigation';
+import { primaryDestination } from '../components/primaryNavigation';
 import { TAB_RETURN_STATE } from './scrollHistory';
 import { reselectPrimaryTab } from './tabNavigation';
 
 /**
- * Where each primary destination was left, by its navigation group: `last` is
- * the page the listener was on, `root` the destination's own page as they left
- * it — Search with its query, Library on its view. Artist and album pages are
- * neutral detail views, so visiting them leaves every tab's saved location intact.
+ * Where each primary destination was left, by its top-level route: `last` is
+ * the subroute or filtered address last visited under it, and `root` is the
+ * destination's own landing address (Discover keeps its search query). Artist
+ * and album pages are neutral detail views, so visiting them leaves every
+ * destination's saved location intact.
  *
  * Module scope, not storage: it describes this session's navigation, and
  * signing out reloads the page.
@@ -16,13 +16,16 @@ import { reselectPrimaryTab } from './tabNavigation';
 const visited = new Map<string, { last: string; root?: string }>();
 
 export function rememberTabLocation(pathname: string, search: string): void {
-  const own = mobileNavGroup(pathname, search);
-  if (!own) return;
-  // Library's own views are Library's, unless the bar gives them a tab.
-  const group = own !== '/' && (own.startsWith('/library?') || own.startsWith('/?saved=')) && !bottomNavigation().includes(own) ? '/' : own;
+  const group = primaryDestination(pathname);
+  if (!group) return;
   const location = `${pathname}${search}`;
-  const root = own === group && pathname === group.split('?')[0];
-  visited.set(group, { last: location, root: root ? location : visited.get(group)?.root });
+  const isRoot = pathname === group;
+  // Discover keeps its search query as its root surface; transient filters
+  // on other routes stay in `last` without overriding the root address.
+  const root = isRoot
+    ? (group === '/search' ? location : group)
+    : visited.get(group)?.root;
+  visited.set(group, { last: location, root });
 }
 
 /** The destination's own page as it was left, if it was visited this session. */
@@ -31,17 +34,30 @@ export function tabRoot(href: string): string | undefined {
 }
 
 /**
- * A primary destination chosen from the tab bar, sidebar or drawer. An inactive
- * one returns where it was left; the active one climbs to its root, and once
- * there re-selection scrolls up (and, on Search, opens the keyboard).
+ * A primary destination chosen from the tab bar, sidebar or drawer.
+ * When `restoreSubroute` is enabled (the mobile tab bar), selecting an inactive
+ * tab returns to its last visited subroute; otherwise (desktop sidebar and
+ * mobile drawer) it navigates directly to the destination root. Selecting the
+ * already-active destination climbs to its root, and once there re-selection
+ * scrolls up (and, on Discover, focuses the search field).
  */
-export function openPrimaryDestination(navigate: Navigator, href: string, selected: boolean, location: string): void {
+export function openPrimaryDestination(
+  navigate: Navigator,
+  href: string,
+  selected: boolean,
+  location: string,
+  options: { restoreSubroute?: boolean } = {},
+): void {
   const root = tabRoot(href) ?? href;
   if (selected && location === root) {
     reselectPrimaryTab(href);
     return;
   }
-  const destination = selected ? root : visited.get(href)?.last ?? href;
+  const destination = selected
+    ? root
+    : options.restoreSubroute
+      ? (visited.get(href)?.last ?? root)
+      : root;
   navigate(destination, { state: { [TAB_RETURN_STATE]: true } });
 }
 
