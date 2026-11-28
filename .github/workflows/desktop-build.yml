@@ -19,6 +19,7 @@ on:
       - 'tests/test_desktop_bootstrap.py'
       - 'tests/test_desktop_engine_entry.py'
       - 'requirements.txt'
+      - 'requirements-dev.txt'
       - '.github/workflows/desktop-build.yml'
       - '.github/actions/attest-with-retry/**'
   pull_request:
@@ -165,7 +166,7 @@ jobs:
 
       # pywinauto drives the installed app in the UI smoke below.
       - name: Install Python dependencies
-        run: pip install -r requirements.txt pywinauto==0.6.9
+        run: pip install -r requirements-dev.txt pywinauto==0.6.9
 
       - name: Exercise source environment leases and bootstrap ordering
         env:

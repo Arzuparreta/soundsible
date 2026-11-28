@@ -263,10 +263,7 @@ PLAYER_URL = f"http://localhost:{STATION_PORT}/player/"
 LAUNCHER_PORT = int(os.environ.get("LAUNCHER_PORT", "5099"))
 SETUP_URL = f"http://localhost:{LAUNCHER_PORT}/setup"
 
-# Note: VENV bootstrap
 ROOT_DIR = Path(__file__).parent.absolute()
-VENV_DIR = ROOT_DIR / "venv"
-PYTHON_EXE = VENV_DIR / ("Scripts\\python.exe" if platform.system() == "Windows" else "bin/python")
 
 from shared.daemon_launcher import (
     start_daemon_process,
@@ -358,11 +355,7 @@ console = Console()
 
 class SoundsibleLauncher:
     def __init__(self):
-        self.os_name = platform.system()
         self.root_dir = ROOT_DIR
-        self.venv_dir = VENV_DIR
-        self.python_exe = PYTHON_EXE
-        self.child_processes = []
         
         # Note: Register cleanup handler
         atexit.register(self.cleanup)
@@ -377,41 +370,19 @@ class SoundsibleLauncher:
         self.stats = {"tracks": 0, "local": 0}
         self.sync_status = "Idle"
         self._load_stats()
-        self.watcher = None
         
     def cleanup(self):
-        """Force kill all child processes and clean up resources on exit."""
-        # Note: Check for API observer in daemon mode
-        api_observer_ref = None
+        """Stop the observer and the engine owned by this launcher."""
         try:
             from shared.api import api_observer
-            api_observer_ref = api_observer
         except Exception:
-            pass
-        
-        has_work = bool(self.child_processes) or api_observer_ref is not None
-        
-        if has_work:
+            api_observer = None
+
+        if api_observer is not None:
             console.print("\n[dim]Cleaning up background services...[/dim]")
-        
-        # Note: Clean up child processes
-        for proc in self.child_processes:
             try:
-                if platform.system() != "Windows":
-                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                else:
-                    proc.terminate()
-            except (OSError, ProcessLookupError):
-                try:
-                    proc.kill()
-                except (OSError, ProcessLookupError):
-                    pass
-        
-        # Note: Stop API observer if running in daemon mode
-        if api_observer_ref is not None:
-            try:
-                api_observer_ref.stop()
-                api_observer_ref.join(timeout=2)
+                api_observer.stop()
+                api_observer.join(timeout=2)
             except Exception:
                 pass
         

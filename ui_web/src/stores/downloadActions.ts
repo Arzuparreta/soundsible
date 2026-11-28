@@ -14,6 +14,18 @@ export interface DownloadActionsPorts {
 
 /** Owns downloadActions behaviour; cross-domain work enters through explicit ports. */
 export function createDownloadActions(ports: DownloadActionsPorts, lifetime: RuntimeLifetime) {
+  async function changeAndReloadQueue(change: () => Promise<unknown>): Promise<void> {
+    const isCurrent = lifetime.capture();
+    try {
+      await change();
+      if (isCurrent()) await ports.actions.loadDownloads();
+    } catch {
+      if (!isCurrent()) return;
+      toast.error(tr('toast.downloadOperationFailed'));
+      void ports.actions.loadDownloads();
+    }
+  }
+
   const domainActions = {
     async downloadTrack(track: Track, source = 'library'): Promise<void> {
       const isCurrent = lifetime.capture();
@@ -138,25 +150,7 @@ export function createDownloadActions(ports: DownloadActionsPorts, lifetime: Run
         return false;
       }
     },
-    async retryDownload(id: string): Promise<void> {
-      const isCurrent = lifetime.capture();
-      try {
-        await api.retryDownload(id);
-        if (!isCurrent()) {
-          return;
-        }
-        await ports.actions.loadDownloads();
-        if (!isCurrent()) {
-          return;
-        }
-      } catch {
-        if (!isCurrent()) {
-          return;
-        }
-        toast.error(tr('toast.downloadOperationFailed'));
-        void ports.actions.loadDownloads();
-      }
-    },
+    retryDownload: (id: string) => changeAndReloadQueue(() => api.retryDownload(id)),
     async removeDownload(id: string): Promise<void> {
       const isCurrent = lifetime.capture();
       try {
@@ -173,44 +167,8 @@ export function createDownloadActions(ports: DownloadActionsPorts, lifetime: Run
         void ports.actions.loadDownloads();
       }
     },
-    async clearFailedDownloads(): Promise<void> {
-      const isCurrent = lifetime.capture();
-      try {
-        await api.clearFailedDownloads();
-        if (!isCurrent()) {
-          return;
-        }
-        await ports.actions.loadDownloads();
-        if (!isCurrent()) {
-          return;
-        }
-      } catch {
-        if (!isCurrent()) {
-          return;
-        }
-        toast.error(tr('toast.downloadOperationFailed'));
-        void ports.actions.loadDownloads();
-      }
-    },
-    async clearDownloads(): Promise<void> {
-      const isCurrent = lifetime.capture();
-      try {
-        await api.clearDownloads();
-        if (!isCurrent()) {
-          return;
-        }
-        await ports.actions.loadDownloads();
-        if (!isCurrent()) {
-          return;
-        }
-      } catch {
-        if (!isCurrent()) {
-          return;
-        }
-        toast.error(tr('toast.downloadOperationFailed'));
-        void ports.actions.loadDownloads();
-      }
-    }
+    clearFailedDownloads: () => changeAndReloadQueue(api.clearFailedDownloads),
+    clearDownloads: () => changeAndReloadQueue(api.clearDownloads)
   };
   return {
     actions: domainActions

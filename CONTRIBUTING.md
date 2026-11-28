@@ -18,11 +18,11 @@ Thanks for your interest in contributing – every bug report, idea, and pull re
 
 2. **Python environment**
 
-   Either let `run.py` bootstrap the venv on first launch, or create it manually:
+   Create the virtual environment if the launcher has not already created it, then install the development tools:
 
    ```bash
    python3 -m venv venv
-   ./venv/bin/pip install -r requirements.txt
+   ./venv/bin/pip install -r requirements-dev.txt
    ```
 
 3. **Web player deps** (one-time). The engine rebuilds `ui_web/dist` automatically when sources change.

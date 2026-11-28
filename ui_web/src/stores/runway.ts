@@ -12,7 +12,7 @@ import { replanRunway, routeKind, routeRows, runwayReplacement } from '../lib/dj
 import { planItemTrack, planSeed } from '../lib/planItems';
 import type { Track } from '../types/music';
 import { state, setState } from './core';
-import type { PlayerActions } from './contracts';
+import type { EmitPlaybackEvent, PlayerActions } from './contracts';
 
 type PlanStatus = 'planning' | 'ready' | 'exhausted' | 'warming' | 'degraded' | 'idle';
 type GeneratedSessionContext = { id: string; segmentIndex: number; context: Track[] };
@@ -51,7 +51,7 @@ export interface RunwayPorts {
   stagedEntry: { queueId: string; attemptId: string; url: string } | null;
   trackPrepared: (track: Track) => boolean;
   loadIndex: (i: number, opts?: { trigger?: 'ended' }) => void;
-  emitPlaybackEvent: (phase: string, extra?: Record<string, number | boolean>, strings?: Record<string, string | undefined>) => void;
+  emitPlaybackEvent: EmitPlaybackEvent;
   runWhenAudible: (() => void) | null;
 }
 

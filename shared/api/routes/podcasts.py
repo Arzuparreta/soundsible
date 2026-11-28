@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 import requests
 from flask import Blueprint, Response, jsonify, request, send_file, stream_with_context
 
+from shared.api.streaming import iter_audio_chunks
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.library_lifecycle import coordinated
 from shared.models import LibraryMetadata, PodcastSubscription
@@ -406,14 +407,6 @@ def enclosure_stream(token: str):
         resp = requests.get(url, headers=req_headers, stream=True, timeout=(5, 120), allow_redirects=True)
         resp.raise_for_status()
 
-        def iter_chunks():
-            try:
-                for chunk in resp.iter_content(chunk_size=65536):
-                    if chunk:
-                        yield chunk
-            finally:
-                resp.close()
-
         out_headers = {}
         ct = resp.headers.get("Content-Type")
         if ct:
@@ -426,7 +419,7 @@ def enclosure_stream(token: str):
             out_headers["Content-Length"] = cl
 
         response = Response(
-            stream_with_context(iter_chunks()),
+            stream_with_context(iter_audio_chunks(resp)),
             status=resp.status_code,
             headers=out_headers,
             direct_passthrough=True,

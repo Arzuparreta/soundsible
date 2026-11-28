@@ -97,11 +97,8 @@ jobs:
           python-version: "3.11"
           cache: pip
       - uses: ./.github/actions/setup-ffmpeg
-      # pytest-xdist is pinned here, like pywinauto in desktop-build.yml, rather
-      # than added to requirements.txt: everything listed there has to be in
-      # requirements.docker.lock, and the image has no use for a test runner.
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest-xdist==3.8.0
+        run: pip install -r requirements-dev.txt pytest-xdist==3.8.0
       # The same suite takes 4.5 or 8.5 minutes depending on the runner it
       # lands on (every heavy test twice as slow, not a few). Recorded so a
       # slow run can be told from a slow test.
@@ -150,7 +147,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: Ruff check
         run: ruff check .
 
@@ -189,7 +186,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
       - name: Bandit security scan
         run: bandit -r . -f txt -o bandit-report.txt || true
       - name: Show bandit report

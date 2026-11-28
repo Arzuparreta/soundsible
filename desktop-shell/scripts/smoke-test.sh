@@ -35,7 +35,7 @@ cd "$ROOT"
 export PYTHONPATH="$ROOT"
 
 echo "==> Python engine smoke"
-"$PYTHON" -m pip install -q -r requirements.txt
+"$PYTHON" -m pip install -q -r requirements-dev.txt
 "$PYTHON" -m pytest tests/test_desktop_engine_smoke.py::test_desktop_engine_smoke_python -q
 
 if [[ "$WITH_SIDECAR" -eq 1 ]]; then

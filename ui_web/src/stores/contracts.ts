@@ -9,6 +9,22 @@ import { type InterfaceSize } from "../lib/visualPreferences";
 import { type Theme } from "./core";
 export type PlaybackTrigger = 'selection' | 'next' | 'ended' | 'retry' | 'resume' | 'recovery' | 'podcast' | 'handoff';
 export type PlaybackSourceKind = 'local' | 'preview' | 'podcast';
+export type EmitPlaybackEvent = (
+  phase: string,
+  extra?: Record<string, number | boolean>,
+  strings?: {
+    failure_reason?: string;
+    display_mode?: string;
+    transport_action?: string;
+    transport_origin?: string;
+    mix_phase?: string;
+    media_session_state?: string;
+    sync_reason?: string;
+    video_id?: string;
+    queue_lane?: string;
+    queue_source?: string;
+  },
+) => void;
 export interface PlaybackAttempt {
   id: string;
   trackId: string;
