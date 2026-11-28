@@ -32,7 +32,7 @@ export default function PlaylistDetail() {
   // looking it up (e.g. "Road%20Trip" -> "Road Trip").
   const name = createMemo(() => decodeURIComponent(params.name ?? ''));
   const trackIds = createMemo<string[]>(() => state.playlists[name()] ?? []);
-  const byId = createMemo(() => collectionIndex(musicLibrary()));
+  const byId = createMemo(() => collectionIndex(state.collectionItems ?? musicLibrary()));
   const tracks = createMemo(() => resolveCollectionTracks(trackIds(), byId()));
 
   const search = createCollectionSearch();

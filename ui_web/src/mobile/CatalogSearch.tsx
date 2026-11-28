@@ -262,7 +262,10 @@ export default function CatalogSearch(props: {
     if (resolved && props.onResolvedMenu) {
       if (resolved.source === 'preview') props.onResolvedMenu(resolved, event, [
         { label: t('common.play'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('play') },
-        { label: t(saved ? 'collection.unsave' : 'collection.save'), selected: saved, disabled: props.disconnected || pending() === item.id, onSelect: () => run(saved ? 'remove' : 'save') },
+        ...(!saved || !resolved.item_id ? [{
+          label: t(saved ? 'collection.unsave' : 'collection.save'), selected: saved,
+          disabled: props.disconnected || pending() === item.id, onSelect: () => run(saved ? 'remove' : 'save'),
+        }] : []),
         ...feedback,
       ]);
       else props.onResolvedMenu(resolved, event, feedback);

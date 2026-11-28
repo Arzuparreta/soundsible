@@ -8,6 +8,8 @@ import { player } from '../stores/player';
 import { savedFromTrack } from '../lib/saved';
 import { shareTrack } from '../lib/share';
 import { confirmDialog } from '../lib/confirm';
+import { collectionRemoval } from '../lib/collectionRemoval';
+import { user } from '../lib/session';
 import { artistDestination, albumDestination, navigateMusic, performerNames, trackMusic, type MusicLinkIntent } from '../lib/musicNavigation';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
@@ -178,22 +180,15 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
         });
       }
     }
-    if (isSaved) {
-      list.push({
-        icon: icons.remove(),
-        label: t('collection.unsave'),
-        danger: true,
-        onSelect: () => actions.toggleSaved(entry),
-      });
-    }
   }
   if (ctx.onPlayOnDevice && canPlayOnDevice(track) && !inRoute)
     list.push({ icon: icons.device(), label: t('trackActions.playOnDevice'), onSelect: () => ctx.onPlayOnDevice!(track) });
   if (ctx.playlistName && ctx.onRemoveFromPlaylist)
     list.push({ icon: icons.remove(), label: t('trackActions.removeFromPlaylist'), danger: true, onSelect: () => ctx.onRemoveFromPlaylist!(track) });
-  // Deleting strips the song out of the queue directly, behind the route's back:
-  // its bridges and planned transition would be left pointing at nothing.
-  if (isLibrary && !inRoute)
+  // A DJ route owns its prepared sources. Leave collection removal to browse surfaces.
+  if (!inRoute && ctx.collection !== false && !isPodcast && isSaved)
+    list.push(...collectionRemovalActions(track));
+  if (isLibrary && isPodcast && !inRoute)
     list.push({ icon: icons.trash(), label: t('trackActions.deleteFromLibrary'), danger: true, onSelect: () => void confirmDelete(track) });
 
   return list;
@@ -271,14 +266,32 @@ async function sendLessFromArtist(
   await sendDiscoveryLessFromArtist({ ...trackFeedbackPayload(track), artist: primaryArtist }, hooks);
 }
 
-async function confirmDelete(track: Track): Promise<void> {
-  const ok = await confirmDialog({
-    title: t('trackActions.deleteTitle'),
-    message: t('trackActions.deleteMsg', { title: track.title }),
-    confirmLabel: t('trackActions.deleteConfirm'),
-    danger: true,
+export function collectionRemovalActions(track: Track): MenuAction[] {
+  const account = user()?.id;
+  const activeActions = actions;
+  const current = () => user()?.id === account && actions === activeActions;
+  const list: MenuAction[] = [];
+  if (track.item_id && track.source !== 'preview' && track.can_remove_download) {
+    list.push({
+      icon: icons.download(), label: t('trackActions.removeDownload'),
+      onSelect: () => void confirmRemoval(track, true, current),
+    });
+  }
+  list.push({
+    icon: icons.trash(), label: t('trackActions.deleteFromLibrary'), danger: true,
+    onSelect: () => void confirmRemoval(track, false, current),
   });
-  if (ok) void actions.deleteTrack(track.id);
+  return list;
+}
+
+async function confirmRemoval(track: Track, keepSaved: boolean, current: () => boolean): Promise<void> {
+  if (current() && await confirmDialog(collectionRemoval(track, keepSaved), current) && current()) {
+    await actions.removeCollectionTrack(track, keepSaved);
+  }
+}
+
+async function confirmDelete(track: Track): Promise<void> {
+  if (await confirmDialog(collectionRemoval(track, false))) await actions.deleteTrack(track.id);
 }
 
 /** The full menu definition for a track (for `use:ctxMenu`). */

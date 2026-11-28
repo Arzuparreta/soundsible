@@ -112,6 +112,29 @@ export function createCollection(ports: CollectionPorts, lifetime: RuntimeLifeti
     toggleFavouriteTrack(track: Track): void {
       ports.actions.toggleFavourite(savedFromTrack(track));
     },
+    async removeCollectionTrack(track: Track, keepSaved: boolean): Promise<void> {
+      const entry = savedFromTrack(track);
+      const itemId = track.item_id ?? state.library.find(row => row.id === track.id)?.item_id
+        ?? savedEntryForKeys(savedIdentityKeys(entry))?.item_id;
+      if (!itemId) {
+        if (track.source === 'preview') ports.actions.toggleSaved(entry);
+        else await domainActions.deleteTrack(track.id);
+        return;
+      }
+      const isCurrent = lifetime.capture();
+      try {
+        const receipt = await api.removeCollectionTrack(itemId, keepSaved);
+        if (!isCurrent()) return;
+        beginLibraryEdit();
+        for (const id of receipt.retired_file_ids) ports.removeTrackReferences(id);
+        await ports.actions.syncLibrary();
+        if (isCurrent()) toast.success(tr(keepSaved ? 'toast.downloadRemoved' : 'toast.trackDeleted'));
+      } catch {
+        if (!isCurrent()) return;
+        toast.error(tr('toast.deleteFailed'));
+        void ports.actions.syncLibrary();
+      }
+    },
     async deleteTrack(id: string): Promise<void> {
       const isCurrent = lifetime.capture();
       const prevLib = state.library.slice();

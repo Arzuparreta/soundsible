@@ -28,7 +28,7 @@ interface TvHomeProps {
 
 export function TvHome(props: TvHomeProps) {
   const focus = useTvFocus();
-  const trackIndex = createMemo(() => buildTrackIndex(musicLibrary(), state.library));
+  const trackIndex = createMemo(() => buildTrackIndex(state.collectionItems ?? musicLibrary(), state.library));
   const fallbackAlbums = createMemo(() => deriveAlbumsFromTracks(musicLibrary()));
 
   const shownLibraryAlbums = createMemo(() =>

@@ -168,6 +168,7 @@ export function savedToTrack(
     // visible (it is a real saved song) but give it an id nothing will mistake
     // for a stream. `savedIsPlayable` is how callers tell the difference.
     id: videoId ?? entry.keys[0],
+    item_id: entry.item_id,
     title: entry.title,
     artist: entry.artist ?? '',
     album: entry.album,

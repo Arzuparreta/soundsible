@@ -21,7 +21,7 @@ interface TvPlaylistDetailProps {
 
 export function TvPlaylistDetail(props: TvPlaylistDetailProps) {
   const focus = useTvFocus();
-  const trackIndex = createMemo(() => buildTrackIndex(musicLibrary(), state.library));
+  const trackIndex = createMemo(() => buildTrackIndex(state.collectionItems ?? musicLibrary(), state.library));
 
   const tracks = createMemo(() =>
     resolvePlaylistTracks(props.playlistName, state.playlists, trackIndex()),

@@ -22,6 +22,9 @@ Current state and way of working. What has been superseded is in
   notices are kept.
 - Offline B: explicit copies of acquired music, "Available offline" in
   three-dot menus; no implicit acquisition or auto-eviction.
+- Song removal follows the [collection contract](../audits/COLLECTION_IDENTITY.md#removing-a-song-or-its-download).
+  After confirming server retirement, Android releases the affected file
+  from its playback program and removes any offline copy on that device.
 - Pairing QR code = full session of the account that shows it (S2av).
 - The maintainer does not have an Android device; do not ask them to connect one to
   close the delivery. The community performs the physical acceptance of listening,

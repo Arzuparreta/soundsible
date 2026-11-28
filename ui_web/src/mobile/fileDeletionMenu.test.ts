@@ -19,7 +19,7 @@ it('a confirmed complete deletion uses the shared success feedback', async () =>
   const deletion = { busy: () => false, remove: vi.fn(async () => true) };
   vi.mocked(confirmDialog).mockResolvedValue(true);
   nativeFileDeletionAction(track, deletion, () => true).onSelect(); await settle();
-  expect(deletion.remove).toHaveBeenCalledWith(track); expect(toast.success).toHaveBeenCalledWith('toast.trackDeleted');
+  expect(deletion.remove).toHaveBeenCalledWith(track, false); expect(toast.success).toHaveBeenCalledWith('toast.trackDeleted');
 });
 it('partial cleanup failure reports failure instead of success', async () => {
   const deletion = { busy: () => false, remove: vi.fn(async () => { throw new Error('copy'); }) };

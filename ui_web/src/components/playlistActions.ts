@@ -24,7 +24,7 @@ export interface PlaylistMenuHooks {
 /** Resolve a playlist's track ids to library tracks (in order). */
 export function playlistTracks(name: string): Track[] {
   const ids = state.playlists[name] ?? [];
-  const byId = collectionIndex(musicLibrary());
+  const byId = collectionIndex(state.collectionItems ?? musicLibrary());
   return resolveCollectionTracks(ids, byId);
 }
 

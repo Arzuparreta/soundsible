@@ -839,12 +839,17 @@ export const api = {
     }),
   getLibraryScan: () =>
     request<LibraryScanStatus>(`/api/library/scan?t=${Date.now()}`, { timeoutMs: 15000 }),
-  /** Delete a track from the library (and its file on disk). */
+  /** Legacy operation on a file ID. */
   deleteTrack: (id: string) =>
     request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}`, {
       method: 'DELETE',
       timeoutMs: 15000,
     }),
+  removeCollectionTrack: (itemId: string, keepSaved: boolean, signal?: AbortSignal) =>
+    request<{ status: string; retired_file_ids: string[] }>(
+      `/api/library/collection/${encodeURIComponent(itemId)}${keepSaved ? '/download' : ''}`,
+      { method: 'DELETE', signal, timeoutMs: 15000 },
+    ),
 
   // ── Lyrics (LRCLIB, then lrc.red, via the engine; library tracks are cached server-side) ──
   getTrackLyrics: (trackId: string, options: { signal?: AbortSignal } = {}) =>

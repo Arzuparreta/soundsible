@@ -18,7 +18,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 export function openPlaylistCoverPicker(name: string): void {
   openOverlay((close) => {
     const tracks = createMemo<Track[]>(() => {
-      const byId = collectionIndex(musicLibrary());
+      const byId = collectionIndex(state.collectionItems ?? musicLibrary());
       return (state.playlists[name] ?? []).map((id) => byId.get(id)).filter((t): t is Track => !!t);
     });
     const current = () => state.librarySettings.playlist_covers?.[name];

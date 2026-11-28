@@ -19,10 +19,12 @@ vi.mock('../stores', () => ({
   actions: store.actions,
   isSavedKeys: () => store.saved, isFavouriteKeys: () => store.favourite,
   isDownloadingKeys: () => store.downloading, ownedTrackForKeys: () => store.owned,
+  savedEntryForKeys: () => undefined,
 }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('./trackActions', () => ({
   buildTrackMenu: store.buildTrackMenu,
+  collectionRemovalActions: () => [],
   queueActions: store.queueActions,
   musicLinkActions: () => [],
   sendDiscoveryNotInterested: store.sendDiscoveryNotInterested,

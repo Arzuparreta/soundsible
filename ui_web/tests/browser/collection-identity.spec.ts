@@ -1,6 +1,54 @@
 import { expect, test } from '@playwright/test';
 import { mockMusicEngine } from './music-browser-fixture';
 
+test('removing a download keeps the song and removing the song keeps only its playlist entry', async ({ page }) => {
+  await mockMusicEngine(page);
+  const item = { id: 'AHwGc3pXfsY', item_id: 'old-item', title: 'Invincible', artist: 'World of Warcraft',
+    source: 'preview', cover: 'https://img.youtube.com/vi/AHwGc3pXfsY/mqdefault.jpg' };
+  const file = { ...item, id: 'old-file', source: undefined, can_remove_download: true };
+  const other = { id: 'other-file', item_id: 'other-item', title: 'Invincible', artist: 'OmegaX91' };
+  const paths: string[] = [];
+  let downloaded = true;
+  let inLibrary = true;
+  const playlists = { Mix: [item.item_id, other.item_id, item.item_id] };
+  const snapshot = () => ({
+    items: [downloaded ? file : { ...item, in_library: inLibrary ? undefined : false }, other],
+    files: downloaded ? [file, other] : [other], playlists,
+    saved: inLibrary ? [{ item_id: item.item_id, title: item.title, keys: [`yt:${item.id}`], favourite: true }] : [],
+    revision: paths.length + 1, library_revision: paths.length + 1, settings: {}, podcast_subscriptions: [],
+  });
+  await page.route(url => url.pathname === '/api/library', route => route.fulfill({
+    headers: { 'X-Soundsible-Collection': 'true' },
+    json: { tracks: snapshot().files, playlists, settings: {}, podcast_subscriptions: [] },
+  }));
+  await page.route(url => url.pathname === '/api/library/collection', route => route.fulfill({ json: snapshot() }));
+  await page.route('**/api/library/collection/old-item**', route => {
+    expect(route.request().method()).toBe('DELETE');
+    const path = new URL(route.request().url()).pathname;
+    paths.push(path);
+    const retired = downloaded ? [file.id] : [];
+    downloaded = false;
+    if (!path.endsWith('/download')) inLibrary = false;
+    return route.fulfill({ json: { status: 'success', retired_file_ids: retired } });
+  });
+  await page.goto('/player/#/songs');
+  const old = page.locator('[data-song-row], [data-music-list-row]').filter({ hasText: 'World of Warcraft' });
+  await old.locator('[data-row-menu], button[aria-label="Más opciones"]').click();
+  await page.getByText('Quitar descarga', { exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Quitar descarga', exact: true }).click();
+  await expect(page.getByText('Descarga eliminada', { exact: true })).toBeVisible();
+  await expect(old).toBeVisible();
+
+  await old.locator('[data-row-menu], button[aria-label="Más opciones"]').click();
+  await page.getByText('Eliminar de la biblioteca', { exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Eliminar', exact: true }).click();
+  await expect(old).toHaveCount(0);
+  await expect(page.locator('[data-song-row], [data-music-list-row]').filter({ hasText: 'OmegaX91' })).toBeVisible();
+  expect(paths).toEqual(['/api/library/collection/old-item/download', '/api/library/collection/old-item']);
+  await page.goto('/player/#/playlists/Mix');
+  await expect(page.getByText('Invincible', { exact: true })).toHaveCount(3);
+});
+
 test('a playlist keeps its musical items as audio moves between stream and file', async ({ page }) => {
   await mockMusicEngine(page);
   const paper = { id: 'paper-file', item_id: 'paper-item', title: 'Papel secante', artist: 'Extremoduro', duration: 296 };

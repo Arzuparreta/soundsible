@@ -71,3 +71,24 @@ it('rejects previews and podcasts without issuing a server write', async () => {
   await expect(state.deletion.remove({ ...track, media_kind: 'podcast_episode' })).rejects.toThrow('Acquired');
   expect(request).not.toHaveBeenCalled();
 });
+
+it('removes a saved stream by item identity without touching offline storage', async () => {
+  const state = setup();
+  vi.mocked(request).mockResolvedValueOnce({ status: 'success', retired_file_ids: [] });
+  expect(await state.deletion.remove({ ...track, id: 'B1111111111', item_id: 'stable-song', source: 'preview' })).toBe(true);
+  expect(request).toHaveBeenCalledExactlyOnceWith('/api/library/collection/stable-song', expect.objectContaining({ method: 'DELETE' }));
+  expect(state.retire).not.toHaveBeenCalled();
+  expect(state.copy).not.toHaveBeenCalled();
+  expect(state.refresh).toHaveBeenCalledOnce();
+});
+
+it('uses the download endpoint and verifies all retired files before native cleanup', async () => {
+  const state = setup();
+  vi.mocked(request)
+    .mockResolvedValueOnce({ status: 'success', retired_file_ids: [track.id, 'another-file'] })
+    .mockResolvedValueOnce({ tracks: [{ ...track, id: 'another-file' }] });
+  await expect(state.deletion.remove({ ...track, item_id: 'stable-song', can_remove_download: true }, true)).rejects.toThrow('not confirmed');
+  expect(request).toHaveBeenNthCalledWith(1, '/api/library/collection/stable-song/download', expect.objectContaining({ method: 'DELETE' }));
+  expect(state.retire).not.toHaveBeenCalled();
+  expect(state.copy).not.toHaveBeenCalled();
+});

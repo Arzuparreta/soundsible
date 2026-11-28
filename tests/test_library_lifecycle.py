@@ -1,8 +1,12 @@
 from pathlib import Path
+from dataclasses import replace
+
+import pytest
 
 from player.library import LibraryManager
 from setup_tool.local_provider import LocalStorageProvider
-from shared.library_lifecycle import drain
+from shared.collection import Collection
+from shared.library_lifecycle import LibraryPersistenceError, drain
 from shared.models import Track, LibraryMetadata
 from shared.user_context import user_context
 from shared import library_intake, user_cores
@@ -55,6 +59,78 @@ def test_failed_commit_keeps_audio_and_restores_memory(tmp_path, monkeypatch):
     assert a.metadata.get_track_by_id('song')
     drain(provider)
     assert audio.exists()
+
+
+def test_removal_contract_keeps_similar_uploads_and_playlist_occurrences(tmp_path, monkeypatch):
+    from flask import Flask
+    from shared.api.routes import car, library as routes
+
+    provider, audio = provider_at(tmp_path / 'pool')
+    lib = library('alice', provider)
+    metadata = replace(lib.metadata, tracks=[
+        replace(track(), title='Invincible', artist='World of Warcraft', youtube_id='AHwGc3pXfsY'),
+        replace(track(), id='other', file_hash='other', title='Invincible', artist='World of Warcraft',
+                youtube_id='4n6WP9qHyRM'),
+    ], playlists={'Mix': ['song', 'other', 'song']})
+    assert lib._save_metadata(metadata=metadata)
+    old, new = [row.item_id for row in metadata.tracks]
+    collection = Collection(lib.db)
+    collection.write_saved([
+        {'item_id': old, 'title': 'Invincible', 'keys': ['yt:AHwGc3pXfsY'], 'favourite': True},
+        {'item_id': new, 'title': 'Invincible', 'keys': ['yt:4n6WP9qHyRM']},
+    ])
+
+    api = {'get_library': lambda: lib, 'emit_to_user': lambda event: None}
+    monkeypatch.setattr(routes, '_get_api', lambda: api)
+    monkeypatch.setattr(car, '_get_api', lambda: api)
+    monkeypatch.setattr('shared.hardening.get_request_auth_context', lambda **kwargs: {'kind': 'owner'})
+    app = Flask(__name__)
+    app.register_blueprint(routes.library_bp)
+    app.register_blueprint(car.car_bp)
+    client = app.test_client()
+    assert client.delete(f'/api/library/collection/{old}/download').get_json()['retired_file_ids'] == ['song']
+    stream = next(row for row in collection.snapshot()['items'] if row['item_id'] == old)
+    assert stream['id'] == 'AHwGc3pXfsY'
+    assert stream['cover'] == 'https://img.youtube.com/vi/AHwGc3pXfsY/mqdefault.jpg'
+    assert collection.saved()[0]['favourite']
+    assert not audio.exists()
+
+    for _ in range(2):
+        assert client.delete(f'/api/library/collection/{old}').status_code == 200
+    assert client.delete(f'/api/library/collection/{old}/download').status_code == 200
+    after = collection.snapshot()
+    assert [row['item_id'] for row in after['saved']] == [new]
+    assert [row['id'] for row in after['files']] == ['other']
+    assert after['playlists'] == {'Mix': [old, new, old]}
+    assert next(row for row in after['items'] if row['item_id'] == old)['in_library'] is False
+    assert [row['id'] for row in client.get('/api/car/items/all-tracks').get_json()['items']] == [new]
+    assert [row['id'] for row in client.get('/api/car/items/playlist:Mix').get_json()['items']] == [old, new, old]
+
+
+def test_full_removal_rolls_back_membership_with_the_file(tmp_path, monkeypatch):
+    provider, audio = provider_at(tmp_path / 'pool')
+    lib = library('alice', provider)
+    collection = Collection(lib.db)
+    collection.write_saved([{'keys': ['lib:song'], 'title': 'Song', 'favourite': True}])
+    with pytest.raises(ValueError, match='no online playback source'):
+        lib.remove_collection_item('song', keep_saved=True)
+
+    def fail(*args):
+        raise OSError('disk full')
+
+    with monkeypatch.context() as failing:
+        failing.setattr(lib.db, '_replace_catalog_projection', fail)
+        with pytest.raises(LibraryPersistenceError):
+            lib.remove_collection_item('song', keep_saved=False)
+    assert collection.saved()[0]['favourite']
+    assert lib.metadata.get_track_by_id('song')
+    drain(provider)
+    assert audio.exists()
+
+    assert lib.remove_collection_item('song', keep_saved=False) == ['song']
+    assert collection.saved() == []
+    assert collection.snapshot()['items'][0]['unavailable']
+    assert not audio.exists()
 
 
 def test_failed_physical_delete_is_recoverable(tmp_path, monkeypatch):

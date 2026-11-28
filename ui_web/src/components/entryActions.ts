@@ -1,6 +1,6 @@
 import type { MenuEvent } from '../lib/menuEvent';
 import type { MusicLinkIntent } from '../lib/musicNavigation';
-import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys } from '../stores';
+import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys, savedEntryForKeys } from '../stores';
 import { player } from '../stores/player';
 import { catalogContextTrack, resolveCatalogTrack } from '../lib/catalogItem';
 import { guardDjPick } from '../lib/djErrand';
@@ -10,7 +10,7 @@ import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
 import { openContextMenu } from '../lib/contextMenu';
 import type { CatalogItem, RecommendationContext, SavedEntry, Track } from '../types/music';
-import { buildTrackMenu, musicLinkActions, queueActions, sendDiscoveryLessFromArtist, sendDiscoveryNotInterested } from './trackActions';
+import { buildTrackMenu, collectionRemovalActions, musicLinkActions, queueActions, sendDiscoveryLessFromArtist, sendDiscoveryNotInterested } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import type { MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
@@ -216,7 +216,15 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
       });
     }
   }
-  if (saved && !owned) list.push({ icon: menuIcons.remove(), label: t('collection.unsave'), danger: true, onSelect: () => actions.toggleSaved(entry) });
+  if (saved) {
+    const held = savedEntryForKeys(entry.keys);
+    const target = owned ?? (held && savedToTrack(held, new Map()));
+    if (target) list.push(...collectionRemovalActions(target));
+    else if (!entry.item_id) list.push({
+      icon: menuIcons.remove(), label: t('collection.unsave'), danger: true,
+      onSelect: () => actions.toggleSaved(entry),
+    });
+  }
   return list;
 }
 

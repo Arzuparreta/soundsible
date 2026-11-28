@@ -65,6 +65,17 @@ def bump(conn):
     conn.execute('UPDATE collection_state SET revision=revision+1 WHERE singleton=1')
 
 
+def set_membership(conn, item_id, saved):
+    """Apply explicit library membership inside the file catalogue transaction."""
+    if saved:
+        changed = conn.execute('UPDATE collection_items SET saved=1 WHERE id=? AND saved=0', (item_id,))
+    else:
+        changed = conn.execute('''UPDATE collection_items SET saved=0,favourite=0,favourited_at=NULL
+            WHERE id=? AND (saved=1 OR favourite=1)''', (item_id,))
+    if changed.rowcount:
+        bump(conn)
+
+
 def item_for_keys(conn, keys):
     """Resolve exact evidence only when it names one item, never first-wins.
 
@@ -494,6 +505,18 @@ class Collection:
             visit(body)
         return body
 
+    def removal_target(self, item_id):
+        """Return the exact account item's membership and playable sources."""
+        with self.db._get_connection() as conn:
+            row = conn.execute("""SELECT (i.saved OR i.favourite), EXISTS(SELECT 1 FROM collection_sources
+                WHERE item_id=i.id AND kind='youtube')
+                FROM collection_items i WHERE i.id=?""", (item_id,)).fetchone()
+            if row is None:
+                return None
+            files = {file_id for (file_id,) in conn.execute(
+                'SELECT file_id FROM collection_files WHERE item_id=?', (item_id,))}
+            return files, bool(row[0]), bool(row[1])
+
     def snapshot(self):
         """Materialize source descriptors by persisted relations, not guessing."""
         with self.db._get_connection() as conn:
@@ -501,7 +524,7 @@ class Collection:
             conn.execute('BEGIN')
             try:
                 saved = entries(conn)
-                rows = conn.execute('''SELECT DISTINCT i.id,i.snapshot,i.added_at FROM collection_items i
+                rows = conn.execute('''SELECT i.id,i.snapshot,i.added_at,i.saved FROM collection_items i
                     WHERE i.saved=1 OR EXISTS(SELECT 1 FROM collection_files f WHERE f.item_id=i.id)
                     OR EXISTS(SELECT 1 FROM playlist_tracks p WHERE p.track_id=i.id)
                     ORDER BY COALESCE((SELECT MAX(l.position) FROM collection_files f
@@ -511,6 +534,7 @@ class Collection:
                 files = self.db._rows_to_tracks(conn, conn.execute('''SELECT t.* FROM tracks t
                     JOIN library_tracks l ON l.track_id=t.id ORDER BY l.position''').fetchall())
                 file_rows = [track.to_public_dict() for track in files]
+                imported_items = {track.item_id for track in files if track.local_path}
                 by_item = {}
                 for track in file_rows:
                     by_item.setdefault(track['item_id'], track)
@@ -521,21 +545,28 @@ class Collection:
                 videos_by_item = {}
                 for item_id, source_id in conn.execute("SELECT item_id,source_id FROM collection_sources WHERE kind='youtube' ORDER BY rowid"):
                     videos_by_item.setdefault(item_id, source_id)
-                for item_id, raw, added_at in rows:
+                for track in file_rows:
+                    item_id = track['item_id']
+                    track['can_remove_download'] = item_id in videos_by_item and item_id not in imported_items
+                from shared.downloader.youtube.ids import thumbnail_url
+                for item_id, raw, added_at, saved_flag in rows:
+                    video = videos_by_item.get(item_id)
                     if item_id in by_item:
                         track = by_item[item_id]
                     else:
                         data = json.loads(raw)
                         keys = keys_by_item.get(item_id, [])
-                        video = videos_by_item.get(item_id)
                         track = {key: deepcopy(data[key]) for key in (
-                            'title', 'artist', 'album', 'album_artist', 'track_number', 'disc_number',
+                            'title', 'artist', 'artists', 'album', 'album_artist', 'track_number', 'disc_number',
                             'year', 'duration', 'media_kind', 'podcast_feed_id', 'podcast_episode_guid',
                             'podcast_rss_url') if key in data}
                         track.update(id=video or item_id, item_id=item_id, source='preview',
-                                     cover=data.get('thumbnail'), originKeys=keys,
+                                     cover=None if data.get('cover_source') == 'none' else (data.get('thumbnail') or thumbnail_url(video)),
+                                     originKeys=keys,
                                      unavailable=not bool(video), title=data.get('title') or item_id,
                                      artist=data.get('artist') or '')
+                        if not saved_flag:
+                            track['in_library'] = False
                     track['added_at'] = added_at
                     result.append(track)
                 playlists = {}
