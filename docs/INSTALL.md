@@ -25,7 +25,7 @@ move to the service later. Whichever you use first needs the
 
 ## 1. Requirements
 
-- **Python 3.10+**, **git**, and **Node.js 24 LTS** with **npm** (Node 22.22.2+ and 26 are also supported)
+- **Python 3.11+**, **git**, and **Node.js 24 LTS** with **npm** (Node 22.22.2+ and 26 are also supported)
   (the web player is built from source during engine startup).
 - **FFmpeg** — not bundled; install via your OS package manager:
   - Debian/Ubuntu: `sudo apt install ffmpeg`

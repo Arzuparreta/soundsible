@@ -21,6 +21,7 @@ flask-cors>=4.0.0          # Cross-Origin Resource Sharing
 
 # HTTP Client
 requests>=2.31.0           # Sync HTTP requests
+certifi>=2026.10.18         # Requests CA bundle with updated trust roots
 urllib3>=2.8.0             # Requests dependency; proxy TLS and streaming security fixes
 platformdirs>=4.2.0        # Cross-platform user config/data/cache/log dirs
 
@@ -30,7 +31,7 @@ feedparser>=6.0.10         # Parse podcast feeds
 # Intel macOS retains the last binary-wheel line; see dependency update plan.
 cryptography>=48.0.1,<49; sys_platform == "darwin" and platform_machine == "x86_64"
 cryptography>=50.0.2; sys_platform != "darwin" or platform_machine != "x86_64"
-pillow>=10.0.0             # Image processing (covers, branding)
+pillow>=13.0.0             # Image processing (covers, branding)
 watchdog>=3.0.0            # Folder monitoring
 
 # Downloader (shared/downloader)

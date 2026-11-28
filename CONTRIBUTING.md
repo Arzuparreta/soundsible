@@ -4,7 +4,7 @@ Thanks for your interest in contributing – every bug report, idea, and pull re
 
 ### Prerequisites
 
-- **Python 3.10+**, **git**, **FFmpeg**
+- **Python 3.11+**, **git**, **FFmpeg**
 - **Node.js 22+** and **npm** — required to build or develop the SolidJS player in `ui_web/` (the production bundle in `ui_web/dist/` is not committed)
 
 ### How to get started
@@ -109,6 +109,6 @@ a development client with read-only browsing; no alpha will ship before parity a
 
 ### Code style
 
-- Prefer modern Python (3.10+) idioms.
+- Prefer modern Python (3.11+) idioms.
 - Use descriptive names and keep functions focused.
 - Match the existing style of the files you touch.
