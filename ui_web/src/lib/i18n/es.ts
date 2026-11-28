@@ -185,6 +185,8 @@ export const es: Dict = {
     },
   },
   common: {
+    updatedPage: 'Soundsible se ha actualizado. Recarga para abrir esta página.',
+    reload: 'Recargar',
     clearSearch: 'Borrar búsqueda',
     loadFailed: 'No se ha podido cargar. Inténtalo de nuevo.',
     play: 'Reproducir',
