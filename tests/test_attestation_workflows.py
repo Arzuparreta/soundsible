@@ -103,6 +103,7 @@ def test_image_certification_reuses_digest_without_rebuilding_or_retagging():
     assert not any('attest' in step.get('uses', '') for step in publish['steps'])
     certify = jobs['attest_image']
     assert certify['needs'] == 'publish'
+    assert certify['if'] == "${{ !cancelled() && needs.publish.result == 'success' }}"
     assert not certify.get('continue-on-error')
     assert not any('build-push' in step.get('uses', '') for step in certify['steps'])
     attest = next(step for step in certify['steps'] if step.get('uses') == ACTION)

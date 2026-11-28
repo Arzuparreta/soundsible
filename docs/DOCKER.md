@@ -15,12 +15,16 @@ image as an x86 server without compiling anything.
 | `ghcr.io/arzuparreta/soundsible:latest` | The most recent tagged release. |
 | `ghcr.io/arzuparreta/soundsible:X.Y.Z` · `:X.Y` | A specific release, pinned. |
 
-Every published image carries a signed build-provenance attestation. Verify one
-before you run it:
+GitHub Actions signs the image's digest after publishing it. Verify the tag or
+digest you intend to deploy with GitHub CLI.
 
 ```bash
 gh attestation verify oci://ghcr.io/arzuparreta/soundsible:edge --repo Arzuparreta/soundsible
 ```
+
+A tag can be available before its signing job succeeds. If verification reports
+no attestation, check the `attest_image` job in the corresponding CI run and
+retry once it succeeds.
 
 ## Quick start
 
@@ -89,6 +93,87 @@ scanning work, but downloads and library modifications that write audio will
 not. Open **Settings → Library → Rescan files** after mounting it. Soundsible
 indexes supported files in place; it does not copy or rename the originals.
 
+## Migrate a native installation
+
+Use the published image and Compose file from [Quick start](#quick-start).
+Save the file in a new directory and wait to start Compose until you have
+seeded the configuration and data volumes. Use fresh volumes. If there is
+already a Docker installation on the host, give the migration a distinct
+project name and use it for each Compose command.
+
+1. In the Compose file, [bind your existing music folder](#use-an-existing-host-library)
+   and set `SOUNDSIBLE_CONTAINER_AUTO_CONFIGURE: "false"` under the service's
+   `environment`. Keep the same published host port if clients or a reverse
+   proxy already use it. Carry over any environment settings your native service
+   relies on, such as an admin token or download proxy. Pull the image with
+   `docker compose pull` before stopping the native engine.
+2. Stop the native engine and any separate downloader or sync jobs. For a
+   native installation using the systemd unit from the install guide, run
+   `sudo systemctl stop soundsible.service`. Keep the original configuration and
+   data directories, and back up the music folder separately if it holds your
+   only copy of the audio.
+3. From the native Soundsible checkout, with its Python environment active,
+   create a verified backup and a separate copy to prepare for the container.
+   The example uses the [default Linux paths](CONFIGURATION.md#7-where-soundsible-keeps-its-files).
+   Substitute your actual configuration and data directories if you set overrides.
+
+   ```bash
+   migration_dir=$(mktemp -d "$HOME/soundsible-migration.XXXXXX")
+   python -m shared.instance_backup create "$migration_dir/backup" \
+     --config-dir "$HOME/.config/soundsible" \
+     --data-dir "$HOME/.local/share/soundsible" --stopped
+   python -m shared.instance_backup verify "$migration_dir/backup"
+   python -m shared.instance_backup restore "$migration_dir/backup" "$migration_dir/restore"
+   ```
+
+4. Review paths in the restored copy under `restore/config`. With the usual
+   `/music` mount, update the local provider's filesystem `endpoint` in
+   `config.json` to `/music` and map `watch_folders` to the paths you mounted.
+   Update `music_dir.json` (`path`), `output_dir` and `downloader.env`
+   (`OUTPUT_DIR`), where present, to match. Check any other settings that point
+   to host files, such as a custom cookies path.
+
+   Scanned tracks already in your library can have absolute paths in SQLite.
+   Mount their folders at the original absolute paths inside the container and
+   keep those paths in the watch folders. If the scanned tracks are under the
+   main music folder, bind that folder at its original path as well and set
+   both `SOUNDSIBLE_MUSIC_DIR` and `OUTPUT_DIR` in the service environment to
+   that path. Keep the original music paths in the restored settings in that
+   case. This preserves the paths SQLite already has.
+5. From the Compose directory, load the restored copy into the volumes, then
+   start the service. The import runs under the same user as Soundsible.
+
+   ```bash
+   set -o pipefail
+   tar -C "$migration_dir/restore" -cf - config data |
+     docker compose run --rm --no-deps -T --entrypoint tar soundsible -C / -xf - &&
+     docker compose up -d --wait
+   ```
+
+6. Sign in at the same URL and check your library, playlists and local audio
+   playback. If the native engine was configured to start on boot, disable its
+   autostart after the Docker checks pass. For systemd, run
+   `sudo systemctl disable soundsible.service`. Keep the backup until you have
+   tested the migration. To switch back, stop Compose with `docker compose stop
+   soundsible`, then start the native engine from its original configuration
+   and data. Re-enable native autostart if you disabled it. Changes made in
+   Docker after the switch are stored in the Docker volumes.
+
+## Remote access over Tailscale
+
+Run Tailscale on the Docker host. After `docker compose ps` shows a healthy
+service, check the published port from the host. With the default settings,
+`curl --fail http://127.0.0.1:5005/api/health` returns `healthy`. Point
+Tailscale Serve at that host port using the [native guide's Tailscale steps](INSTALL.md#4-remote-access-over-tailscale).
+If you set `SOUNDSIBLE_PORT` in the Compose `.env`, use that port in both the
+health check from the host and the Tailscale command.
+
+An existing Serve or Funnel route continues to work when Docker publishes
+the same port on the same host. Check `tailscale serve status` for the target
+and open `/player/` on your existing HTTPS URL. For access exclusively through
+the host's Tailscale proxy, you can bind the published port to loopback in
+`compose.yaml` with `"127.0.0.1:${SOUNDSIBLE_PORT:-5005}:5005"`.
+
 ## Configuration and security
 
 Compose reads optional values from a `.env` file beside `compose.yaml`:
@@ -121,14 +206,13 @@ must use the container paths (`/config`, `/data`, `/cache`, `/logs`, `/music`).
 
 ## Operations
 
-The Docker path is continuously built and started in GitHub Actions for every
-pull request and change to `main` or `dev`. A scheduled clean rebuild also
-checks it against freshly pulled base images and package indexes. A green
-`docker` check means the actual Compose deployment started healthy, served the
-player, ran as its unprivileged user, and kept first-run configuration across a
-container recreation. Only after those checks pass does the `publish` job push
-the multi-architecture image, so nothing reaches `edge` that has not already
-started and served the player in CI.
+GitHub Actions builds and starts the Docker stack when image inputs change.
+A scheduled clean rebuild also checks freshly pulled base images and package
+indexes. The `docker` smoke test checks that Compose starts healthy, serves the
+player, runs Soundsible as an unprivileged user, and keeps first-run
+configuration across a container recreation. A failing Docker check blocks
+publication. When the image inputs are unchanged, CI can skip those checks and
+still publish an image for the new commit.
 
 View status and logs:
 
