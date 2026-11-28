@@ -63,7 +63,11 @@ public class CatalogSearchTest {
             waitFor(web,scenario,"window.__catalog?.id==='A1111111111' && window.__catalog.playing");
             assertEquals("false",web.evaluate(scenario,"!!document.querySelector('audio') || performance.getEntriesByType('resource').some(e=>e.name.includes('authenticated-runtime'))"));
             menu(web,scenario,"fixture direct song","Save to your library");awaitSaved(connection,origin,"A1111111111",true);
-            menu(web,scenario,"fixture direct song","Remove from your library");awaitSaved(connection,origin,"A1111111111",false);
+            menu(web, scenario, "fixture direct song", "Delete from library");
+            String deleteButton = "Array.from(document.querySelectorAll('[role=dialog] button')).find(b=>b.textContent==='Delete')";
+            waitFor(web, scenario, "!!" + deleteButton);
+            web.evaluate(scenario, deleteButton + ".click()");
+            awaitSaved(connection, origin, "A1111111111", false);
             menu(web,scenario,"fixture resolved song","Save to your library");awaitSaved(connection,origin,"C1111111111",true);
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='fixture resolved song').click()");
             waitFor(web,scenario,"window.__catalog?.id==='C1111111111' && window.__catalog.playing");
