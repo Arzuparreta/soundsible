@@ -22,6 +22,8 @@ from typing import Any, Optional
 
 from flask import Blueprint, jsonify, request
 
+from shared.user_cores import refreshed_library as _library
+
 logger = logging.getLogger(__name__)
 
 library_catalog_bp = Blueprint("library_catalog", __name__, url_prefix="")
@@ -33,17 +35,6 @@ DEFAULT_ALBUM_SORT = "alphabeticalByName"
 
 class _CatalogUnavailable(RuntimeError):
     """The account has no readable SQLite index right now."""
-
-
-def _library():
-    """The bound account's library, refreshed if the manifest moved under us."""
-    from shared.user_cores import get_library
-
-    lib = get_library()
-    lib.refresh_if_stale()
-    if not lib.metadata:
-        lib.sync_library()
-    return lib
 
 
 def _db():

@@ -8,6 +8,20 @@ import { toast } from './toast';
 
 type ReleaseEvidence = Pick<Parameters<typeof api.saveCatalogItem>[0], 'album' | 'album_artist' | 'track_number' | 'disc_number' | 'year'>;
 
+export function catalogSaveRequest(item: CatalogItem, artist: string, evidence: ReleaseEvidence) {
+  return {
+    catalog_item_id: item.id,
+    source: item.source,
+    artist,
+    title: item.title,
+    duration: item.duration,
+    cover: item.cover,
+    external_ids: item.external_ids,
+    identity_keys: catalogItemKeys(item),
+    ...evidence,
+  };
+}
+
 export function createCatalogDownload(releaseEvidence: (item: CatalogItem) => ReleaseEvidence) {
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
 
@@ -16,17 +30,7 @@ export function createCatalogDownload(releaseEvidence: (item: CatalogItem) => Re
     if (!artist || !item.title) return;
     setSaving((s) => new Set(s).add(item.id));
     try {
-      const response = await api.saveCatalogItem({
-        catalog_item_id: item.id,
-        source: item.source,
-        artist,
-        title: item.title,
-        duration: item.duration,
-        cover: item.cover,
-        external_ids: item.external_ids,
-        identity_keys: catalogItemKeys(item),
-        ...releaseEvidence(item),
-      });
+      const response = await api.saveCatalogItem(catalogSaveRequest(item, artist, releaseEvidence(item)));
       if (response.status === 'queued') {
         toast.success(t('search.addedToDownloads'));
       } else if (response.status === 'needs_review') {

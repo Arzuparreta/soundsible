@@ -135,3 +135,19 @@ pub fn pairing_revoke_device(token_id: String) -> Result<Value, String> {
 pub fn pairing_qr_data_url(qr_text: String) -> Result<String, String> {
     qr_png_data_url(&qr_text)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pairing_qr_encodes_a_readable_png() {
+        let url = qr_png_data_url("soundsible://pair/example").unwrap();
+        let bytes = STANDARD
+            .decode(url.strip_prefix("data:image/png;base64,").unwrap())
+            .unwrap();
+        let image = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).unwrap();
+        assert_eq!(image.width(), image.height());
+        assert!(image.width() >= 220);
+    }
+}

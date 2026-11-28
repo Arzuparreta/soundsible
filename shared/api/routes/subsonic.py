@@ -46,6 +46,7 @@ from shared.subsonic.envelope import (
     respond,
 )
 from shared.user_context import user_context
+from shared.user_cores import refreshed_library as _library
 
 logger = logging.getLogger(__name__)
 
@@ -177,17 +178,6 @@ def _endpoint(name: str, methods: tuple[str, ...] = ("GET", "POST")) -> Callable
 # ---------------------------------------------------------------------------
 # Library access
 # ---------------------------------------------------------------------------
-
-
-def _library():
-    """The bound account's library, refreshed if the manifest moved under us."""
-    from shared.user_cores import get_library
-
-    lib = get_library()
-    lib.refresh_if_stale()
-    if not lib.metadata:
-        lib.sync_library()
-    return lib
 
 
 def _db():

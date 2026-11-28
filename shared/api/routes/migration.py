@@ -15,18 +15,9 @@ from shared.migration.match import match_sources_to_library, migration_stats
 from shared.migration.store import MigrationStore
 from shared.telemetry import emit
 from shared.user_context import require_user_id
+from shared.user_cores import refreshed_library as _loaded_library
 
 migration_bp = Blueprint("migration", __name__, url_prefix="")
-
-
-def _loaded_library():
-    from shared.user_cores import get_library
-
-    lib = get_library()
-    lib.refresh_if_stale()
-    if not lib.metadata:
-        lib.sync_library()
-    return lib
 
 
 def _emit_migration(kind: str, payload: dict[str, Any]) -> None:

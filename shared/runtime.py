@@ -12,9 +12,12 @@ import threading
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import TYPE_CHECKING, Mapping, Optional
 
 from platformdirs import PlatformDirs
+
+if TYPE_CHECKING:
+    from argparse import Namespace
 
 
 APP_NAME = "soundsible"
@@ -213,6 +216,39 @@ def runtime_with_overrides(
         lan_enabled=current.lan_enabled if lan_enabled is None else lan_enabled,
         advanced_mode=current.advanced_mode if advanced_mode is None else advanced_mode,
     )
+
+
+def prepare_runtime(
+    args: Namespace,
+    *,
+    base: RuntimeConfig,
+    host: str | None,
+    port: int | None,
+    lan_enabled: bool | None,
+    advanced_mode: bool,
+) -> RuntimeConfig:
+    """Apply launcher overrides, resolve the bind port and prepare app directories."""
+    runtime = runtime_with_overrides(
+        base=base,
+        host=host,
+        port=port,
+        config_dir=args.config_dir,
+        data_dir=args.data_dir,
+        cache_dir=args.cache_dir,
+        log_dir=args.log_dir,
+        music_dir=args.music_dir,
+        ui_dist=args.ui_dist,
+        owner_token_file=args.owner_token_file,
+        lan_enabled=lan_enabled,
+        advanced_mode=advanced_mode,
+    )
+    if runtime.port == 0:
+        bind_host, bind_port = runtime.resolved_bind()
+        runtime = runtime_with_overrides(base=runtime, host=bind_host, port=bind_port)
+    configure_runtime(runtime)
+    migrate_legacy_app_dirs(runtime)
+    ensure_runtime_directories(runtime)
+    return runtime
 
 
 def ensure_runtime_directories(runtime_config: Optional[RuntimeConfig] = None) -> RuntimeConfig:

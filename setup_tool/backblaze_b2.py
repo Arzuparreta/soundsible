@@ -10,6 +10,21 @@ import os
 from .storage_provider import S3StorageProvider, UploadProgress
 
 
+class _ProgressListener:
+    def __init__(self, callback: Callable[[UploadProgress], None], total_bytes: int, path: str):
+        self.callback = callback
+        self.total_bytes = total_bytes
+        self.file_name = os.path.basename(path)
+
+    def __call__(self, transferred: int) -> None:
+        self.callback(UploadProgress(
+            bytes_uploaded=transferred,
+            total_bytes=self.total_bytes,
+            percentage=transferred / self.total_bytes * 100 if self.total_bytes > 0 else 0,
+            file_name=self.file_name,
+        ))
+
+
 class BackblazeB2Provider(S3StorageProvider):
     """
     Backblaze B2 storage implementation using b2sdk.
@@ -114,23 +129,7 @@ class BackblazeB2Provider(S3StorageProvider):
             
             file_size = os.path.getsize(local_path)
             
-            # Note: Progress listener
-            class ProgressListener:
-                def __init__(self, callback, total_bytes, file_name):
-                    self.callback = callback
-                    self.total_bytes = total_bytes
-                    self.file_name = file_name
-                
-                def __call__(self, bytes_uploaded):
-                    if self.callback:
-                        self.callback(UploadProgress(
-                            bytes_uploaded=bytes_uploaded,
-                            total_bytes=self.total_bytes,
-                            percentage=(bytes_uploaded / self.total_bytes * 100) if self.total_bytes > 0 else 0,
-                            file_name=self.file_name
-                        ))
-            
-            listener = ProgressListener(progress_callback, file_size, os.path.basename(local_path)) if progress_callback else None
+            listener = _ProgressListener(progress_callback, file_size, local_path) if progress_callback else None
             
             # Note: Upload with automatic large file handling
             self.bucket.upload_local_file(
@@ -157,23 +156,7 @@ class BackblazeB2Provider(S3StorageProvider):
             file_version = self.bucket.get_file_info_by_name(remote_key)
             file_size = file_version.size
             
-            # Note: Progress listener
-            class ProgressListener:
-                def __init__(self, callback, total_bytes, file_name):
-                    self.callback = callback
-                    self.total_bytes = total_bytes
-                    self.file_name = file_name
-                
-                def __call__(self, bytes_downloaded):
-                    if self.callback:
-                        self.callback(UploadProgress(
-                            bytes_uploaded=bytes_downloaded,
-                            total_bytes=self.total_bytes,
-                            percentage=(bytes_downloaded / self.total_bytes * 100) if self.total_bytes > 0 else 0,
-                            file_name=self.file_name
-                        ))
-            
-            listener = ProgressListener(progress_callback, file_size, os.path.basename(remote_key)) if progress_callback else None
+            listener = _ProgressListener(progress_callback, file_size, remote_key) if progress_callback else None
             
             self.bucket.download_file_by_name(
                 remote_key,

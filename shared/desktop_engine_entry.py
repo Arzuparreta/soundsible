@@ -23,10 +23,8 @@ from shared.runtime_cli import seed_runtime_env_from_args
 from shared.runtime import (
     RuntimeConfig,
     configure_runtime,
-    ensure_runtime_directories,
     get_config_dir,
-    migrate_legacy_app_dirs,
-    runtime_with_overrides,
+    prepare_runtime,
 )
 
 
@@ -54,27 +52,10 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
     base = RuntimeConfig.default()
     host = args.host if args.host is not None else "127.0.0.1"
     port = args.port if args.port is not None else 0
-    runtime = runtime_with_overrides(
-        base=base,
-        host=host,
-        port=port,
-        config_dir=args.config_dir,
-        data_dir=args.data_dir,
-        cache_dir=args.cache_dir,
-        log_dir=args.log_dir,
-        music_dir=args.music_dir,
-        ui_dist=args.ui_dist,
-        owner_token_file=args.owner_token_file,
-        lan_enabled=args.lan_enabled if args.lan_enabled is not None else False,
-        advanced_mode=False,
+    return prepare_runtime(
+        args, base=base, host=host, port=port,
+        lan_enabled=bool(args.lan_enabled), advanced_mode=False,
     )
-    if runtime.port == 0:
-        bind_host, bind_port = runtime.resolved_bind()
-        runtime = runtime_with_overrides(base=runtime, host=bind_host, port=bind_port)
-    configure_runtime(runtime)
-    migrate_legacy_app_dirs(runtime)
-    ensure_runtime_directories(runtime)
-    return runtime
 
 
 def desktop_readiness_payload(runtime: RuntimeConfig) -> dict:

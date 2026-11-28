@@ -182,6 +182,15 @@ def ensure_library_metadata():
     return lib, lib.metadata if lib else None
 
 
+def refreshed_library() -> LibraryManager:
+    """Refresh the bound account's library and load metadata if still missing."""
+    lib = get_library()
+    lib.refresh_if_stale()
+    if not lib.metadata:
+        lib.sync_library()
+    return lib
+
+
 def loaded_library():
     """Current user's library manager with metadata guaranteed to be present."""
     lib = get_library()
