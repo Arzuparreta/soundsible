@@ -10,6 +10,7 @@ from flask import Flask
 
 import shared.lyrics as lyrics_module
 from shared.database import instance_db
+from shared.hardening import _reset_rate_limits_for_tests
 from shared.models import Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 
@@ -49,12 +50,14 @@ def _make_app():
     return app
 
 
-def _get_until_ready(client, url, attempts=100):
-    for _ in range(attempts):
+def _get_until_ready(client, url, *, ready=None):
+    # A test can poll twice within the same 60-request window.
+    for _ in range(25):
         response = client.get(url)
-        if response.status_code != 202:
+        assert response.status_code in (200, 202), f"{url}: HTTP {response.status_code}, {response.get_json()}"
+        if response.status_code == 200 and (ready is None or ready(response.get_json())):
             return response
-        time.sleep(0.001)
+        time.sleep(0.1)
     raise AssertionError(f"lyrics lookup did not complete: {url}")
 
 
@@ -87,10 +90,12 @@ def _reset(tmp_path, monkeypatch):
     monkeypatch.setattr(lyrics_module, "_netease_get", lambda path, params, timeout_sec: None)
     monkeypatch.setattr(lyrics_module, "_lyricsplus_get", lambda params, timeout_sec: None)
     reset_runtime()
+    _reset_rate_limits_for_tests()
     lyrics_module._reset_lyrics_jobs_for_tests()
     _make_runtime(tmp_path)
     yield
     lyrics_module._reset_lyrics_jobs_for_tests()
+    _reset_rate_limits_for_tests()
     reset_runtime()
 
 
@@ -726,11 +731,9 @@ def test_lyrics_cached_by_an_older_resolver_stay_visible_while_they_are_looked_u
     assert first.get_json()["cached"] is True
 
     # A later read collects the refreshed record, which knows its length.
-    for _ in range(100):
-        body = client.get("/api/library/tracks/video-track/lyrics").get_json()
-        if body["synced_duration"] is not None:
-            break
-        time.sleep(0.001)
+    body = _get_until_ready(
+        client, "/api/library/tracks/video-track/lyrics", ready=lambda body: body["synced_duration"] is not None,
+    ).get_json()
     assert body["timing_safe"] is False and body["synced_duration"] == 236
     body = client.get("/api/library/tracks/video-track/lyrics").get_json()
     assert body["cached"] is True and body["synced_duration"] == 236
@@ -1156,18 +1159,16 @@ def test_phase2_enrichment_upgrades_lrclib_without_touching_line_source(monkeypa
     _lrc_red(monkeypatch, [_hit()])
 
     client = _make_app().test_client()
-    first = client.get("/api/library/tracks/track-1/lyrics").get_json()
+    url = "/api/library/tracks/track-1/lyrics"
+    response = client.get(url)
+    assert response.status_code == 200
+    first = response.get_json()
     # Served immediately without waiting on Phase 2.
     assert first["status"] == "ready"
     assert first["synced"] == "[00:01.00]First syllable\n[00:04.50]Second line"
 
     # Wait for background enrichment to settle and re-read.
-    body = first
-    for _ in range(200):
-        if body.get("rich_synced"):
-            break
-        time.sleep(0.005)
-        body = client.get("/api/library/tracks/track-1/lyrics").get_json()
+    body = _get_until_ready(client, url, ready=lambda body: body["rich_synced"] is not None).get_json()
 
     assert body["rich_synced"]["granularity"] == "syllable"
     assert body["enriching"] is False
