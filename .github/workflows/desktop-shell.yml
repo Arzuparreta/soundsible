@@ -19,6 +19,7 @@ on:
       - 'tests/test_desktop_bootstrap.py'
       - 'tests/test_desktop_engine_entry.py'
       - 'requirements.txt'
+      - 'requirements-dev.txt'
       - '.github/workflows/desktop-shell.yml'
   pull_request:
     branches: [main, dev]
@@ -35,6 +36,7 @@ on:
       - 'tests/test_desktop_bootstrap.py'
       - 'tests/test_desktop_engine_entry.py'
       - 'requirements.txt'
+      - 'requirements-dev.txt'
       - '.github/workflows/desktop-shell.yml'
 
 concurrency:
@@ -58,7 +60,7 @@ jobs:
           cache: pip
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
 
       - name: Desktop engine smoke (dev Python)
         env:

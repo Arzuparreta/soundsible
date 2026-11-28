@@ -26,22 +26,11 @@ import { refreshLinkReading } from "../lib/linkQuality";
 import { state, setState, nowPlayingOpen, setNowPlayingOpen } from "./core";
 import { remoteStore, setRemoteStore } from "./remoteLink";
 import { announceTheme, applyTheme } from "./theme";
-import type { PlayerActions, PlaybackAttempt, PublishedPlaybackState } from "./contracts";
+import type { EmitPlaybackEvent, PlayerActions, PlaybackAttempt, PublishedPlaybackState } from "./contracts";
 export interface RuntimePorts {
   RESUME_HANDOFF_ATTEMPTS: number;
   RESUME_SEARCH_ATTEMPTS: number;
-  emitPlaybackEvent: (phase: string, extra?: Record<string, number | boolean>, strings?: {
-    failure_reason?: string;
-    display_mode?: string;
-    transport_action?: string;
-    transport_origin?: string;
-    mix_phase?: string;
-    media_session_state?: string;
-    sync_reason?: string;
-    video_id?: string;
-    queue_lane?: string;
-    queue_source?: string;
-  }) => void;
+  emitPlaybackEvent: EmitPlaybackEvent;
   updateMediaSession: (track: Track | null, reason?: MediaSessionSyncReason, forceMetadata?: boolean) => void;
   programMediaSession: ProgramMediaSession;
   ensureAutoplay: (force?: boolean) => Promise<boolean>;

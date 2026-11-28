@@ -1,0 +1,7 @@
+-r requirements.txt
+
+# Development
+pytest>=7.4.0              # Testing framework
+pytest-cov>=4.1.0          # Coverage reporting
+ruff>=0.1.0                # Fast Python linter (lint + format checks)
+bandit[toml]>=1.7.5        # Security linter

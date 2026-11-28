@@ -31,6 +31,7 @@ import requests
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from shared import lyrics as production
+from shared.music_identity import fold_music_text
 
 PROVIDERS = ("lrclib", "lrc_red", "better_ttml", "better_qq", "better_kugou", "unison", "bini_legacy")
 SEED = "soundsible-lyrics-2026-11-15"
@@ -195,7 +196,7 @@ def parse_text(body, kind):
                 lines.append((stamp(value), None))
     else:
         text = body.splitlines()
-    normalized = production._fold(" ".join(text))
+    normalized = fold_music_text(" ".join(text))
     instrumental = "此歌曲为没有填词的纯音乐" in body
     return {"format": kind, "sync": "word_or_syllable" if words else "line" if lines else "plain" if normalized else "empty",
             "timed_lines": len(lines), "timed_segments": words, "text_chars": len(normalized),

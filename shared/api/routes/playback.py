@@ -12,6 +12,7 @@ from flask import Blueprint, request, jsonify, send_file, Response, redirect
 from werkzeug.exceptions import HTTPException
 
 from shared import preview_cache, preview_streams, request_scope
+from shared.api.streaming import iter_audio_chunks
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
 from shared.realtime import emit_device_state, emit_device_updated, server_now_ms
@@ -594,21 +595,9 @@ def preview_stream_proxy(video_id):
             },
         )
 
-        def iter_chunks():
-            try:
-                for chunk in resp.iter_content(chunk_size=65536):
-                    if chunk:
-                        yield chunk
-            finally:
-                # A media element abandons ranges constantly. Closing here is
-                # what returns the connection to the pool instead of stranding
-                # it — without this the pool drains and every later range pays
-                # for a new handshake again.
-                resp.close()
-
         request_scope.release_resources()
         response = Response(
-            iter_chunks(),
+            iter_audio_chunks(resp),
             status=status_code,
             headers=response_headers,
             mimetype=content_type,

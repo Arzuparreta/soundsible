@@ -11,7 +11,7 @@ import { createQueueEntry, futureEntries, isPendingEntry, manualInsertIndex, sam
 import { shuffled } from "../lib/shuffle";
 import type { Track } from "../types/music";
 import { state, setState, randomId } from "./core";
-import type { PlayerActions, ContextMatchOutcome, LoadOptions } from "./contracts";
+import type { EmitPlaybackEvent, PlayerActions, ContextMatchOutcome, LoadOptions } from "./contracts";
 export interface QueuePorts {
   onPreviewPreparation: (videoId: string, status: PreviewPreparation) => void;
   runWhenAudible: (() => void) | null;
@@ -20,18 +20,7 @@ export interface QueuePorts {
   levelFor: (entry: PlaybackQueueEntry | Track | null | undefined) => number;
   generatedQueue: GeneratedQueueController | null;
   actions: Pick<PlayerActions, 'clearManualQueue' | 'linkCatalogItem' | 'placeAutoTrack' | 'playTrack' | 'removeFromQueue'>;
-  emitPlaybackEvent: (phase: string, extra?: Record<string, number | boolean>, strings?: {
-    failure_reason?: string;
-    display_mode?: string;
-    transport_action?: string;
-    transport_origin?: string;
-    mix_phase?: string;
-    media_session_state?: string;
-    sync_reason?: string;
-    video_id?: string;
-    queue_lane?: string;
-    queue_source?: string;
-  }) => void;
+  emitPlaybackEvent: EmitPlaybackEvent;
   ensureAutoplay: (force?: boolean) => Promise<boolean>;
   resumeFromStarved: () => void;
   insertionFloor: () => number;

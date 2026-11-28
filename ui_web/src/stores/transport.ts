@@ -19,7 +19,7 @@ import { shuffled } from "../lib/shuffle";
 import type { Track } from "../types/music";
 import { levelFor as levelForTrack } from "../lib/loudness";
 import { state, setState, setNowPlayingOpen, randomId, VOLUME_LEVELING_KEY, DJ_MIXING_KEY, type PlaybackState, type RepeatMode } from "./core";
-import type { PlayerActions, PlaybackTrigger, PlaybackSourceKind, PlaybackAttempt, ContextMatchOutcome, LoadOptions, CommittedTransition, PublishedPlaybackState } from "./contracts";
+import type { EmitPlaybackEvent, PlayerActions, PlaybackTrigger, PlaybackSourceKind, PlaybackAttempt, ContextMatchOutcome, LoadOptions, CommittedTransition, PublishedPlaybackState } from "./contracts";
 export interface TransportPorts {
   releasePreparation: () => void;
   updateMediaSession: (track: Track | null, reason?: MediaSessionSyncReason, forceMetadata?: boolean) => void;
@@ -166,18 +166,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       segments: extra
     }).catch(lifetime.guard(() => {}));
   }
-  function emitPlaybackEvent(phase: string, extra: Record<string, number | boolean> = {}, strings: {
-    failure_reason?: string;
-    display_mode?: string;
-    transport_action?: string;
-    transport_origin?: string;
-    mix_phase?: string;
-    media_session_state?: string;
-    sync_reason?: string;
-    video_id?: string;
-    queue_lane?: string;
-    queue_source?: string;
-  } = {}): void {
+  const emitPlaybackEvent: EmitPlaybackEvent = (phase, extra = {}, strings = {}) => {
     recordPlaybackDiagnostic(`store.${phase}`, {
       mode: state.autoMode.active ? 'dj' : 'normal',
       phase: state.playback.phase,
@@ -202,7 +191,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       },
       ...strings
     }).catch(lifetime.guard(() => {}));
-  }
+  };
   function concludeAttempt(attempt: PlaybackAttempt | null, outcome: string): void {
     if (!attempt || attempt.concluded || attempt.audibleAt === null) return;
     attempt.concluded = true;

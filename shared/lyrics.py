@@ -30,7 +30,6 @@ import random
 import re
 import threading
 import time
-import unicodedata
 import xml.etree.ElementTree as ET
 from concurrent.futures import Future, ThreadPoolExecutor
 from difflib import SequenceMatcher
@@ -48,7 +47,7 @@ from shared.lyrics_formats import (
     parse_yrc,
     strip_netease_lrc_credits,
 )
-from shared.music_identity import canonical_music_identity
+from shared.music_identity import canonical_music_identity, fold_music_text
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +113,6 @@ _ISRC_RE = re.compile(r"^[A-Z0-9]{12}$")
 _LOOKUP_WORKERS = 2
 _ENRICH_WORKERS = 2
 
-_SPACE_RE = re.compile(r"\s+")
 _VERSION_TOKENS = {
     "acoustic",
     "acustico",
@@ -129,24 +127,17 @@ _VERSION_TOKENS = {
 }
 
 
-def _fold(value: Any) -> str:
-    text = unicodedata.normalize("NFKD", str(value or ""))
-    text = "".join(ch for ch in text if not unicodedata.combining(ch)).casefold()
-    text = re.sub(r"[^\w]+", " ", text, flags=re.UNICODE)
-    return _SPACE_RE.sub(" ", text).strip()
-
-
 def _canonical_metadata(artist: str, title: str) -> tuple[str, str]:
     identity = canonical_music_identity(artist, title, channel=artist)
     return identity.artist, identity.title
 
 
 def _version_tokens(value: Any) -> set[str]:
-    return set(_fold(value).split()) & _VERSION_TOKENS
+    return set(fold_music_text(value).split()) & _VERSION_TOKENS
 
 
 def _similarity(left: Any, right: Any) -> float:
-    a, b = _fold(left), _fold(right)
+    a, b = fold_music_text(left), fold_music_text(right)
     if not a or not b:
         return 0.0
     if a == b:
@@ -318,8 +309,8 @@ def record_text(record: Optional[Dict[str, Any]]) -> str:
 
 
 def _text_jaccard(left: str, right: str) -> float:
-    a = set(_fold(left).split())
-    b = set(_fold(right).split())
+    a = set(fold_music_text(left).split())
+    b = set(fold_music_text(right).split())
     if not a or not b:
         return 0.0
     return len(a & b) / len(a | b)
@@ -603,7 +594,7 @@ def _lrclib_lookup(
     if rescored:
         return _result_to_record(rescored, results)
 
-    if _fold(f"{canonical_artist} {canonical_title}") == _fold(f"{artist} {title}"):
+    if fold_music_text(f"{canonical_artist} {canonical_title}") == fold_music_text(f"{artist} {title}"):
         return _empty_record()
     retry_results = _lrclib_search(canonical_artist, canonical_title, canonical_album, deadline)
     retry_best = _pick_best(retry_results, canonical_artist, canonical_title, canonical_album, canonical_duration)
@@ -1003,9 +994,9 @@ def _lookup_key(artist: str, title: str, album: Optional[str], duration: Optiona
     return "\x00".join(
         (
             RESOLVER_SOURCE,
-            _fold(clean_artist),
-            _fold(clean_title),
-            _fold(album),
+            fold_music_text(clean_artist),
+            fold_music_text(clean_title),
+            fold_music_text(album),
             str(int(duration or 0)),
         )
     )
