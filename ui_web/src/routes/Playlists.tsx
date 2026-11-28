@@ -23,7 +23,7 @@ import { CheckIcon, MoveIcon, PlusIcon } from '../components/icons';
 
 export default function Playlists() {
   const navigate = useNavigate();
-  const byId = createMemo(() => collectionIndex(musicLibrary()));
+  const byId = createMemo(() => collectionIndex(state.collectionItems ?? musicLibrary()));
   const names = createMemo(() => Object.keys(state.playlists));
 
   const search = createCollectionSearch();

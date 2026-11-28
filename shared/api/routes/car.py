@@ -236,7 +236,8 @@ def get_car_items(item_id: str):
 
     if item_id == "all-tracks":
         if collection is not None:
-            return jsonify(id=item_id, items=[_track_item(track) for track in collection['items'][:MAX_CAR_ITEMS]], status='ok')
+            songs = [track for track in collection['items'] if track.get('in_library', True)]
+            return jsonify(id=item_id, items=[_track_item(track) for track in songs[:MAX_CAR_ITEMS]], status='ok')
         return jsonify({"id": item_id, "items": [_track_item(t) for t in tracks[:MAX_CAR_ITEMS]], "status": "ok"})
 
     if item_id == "playlists":

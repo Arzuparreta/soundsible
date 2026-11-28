@@ -5,6 +5,9 @@ export interface Track {
   artwork_height?: number;
   /** Stable musical element in the account; id identifies the playback source. */
   item_id?: string;
+  /** A playlist can still reference a song that was removed from the library. */
+  in_library?: false;
+  can_remove_download?: boolean;
   unavailable?: boolean;
   id: string;
   title: string;

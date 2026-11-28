@@ -118,7 +118,7 @@ export const identity = createRoot(() => {
    * dated yet still comes out in the order it always did.
    */
   const libraryTracks = createMemo(() => state.collectionItems !== null
-    ? state.collectionItems.filter(isMusicTrack)
+    ? state.collectionItems.filter(track => track.in_library !== false && isMusicTrack(track))
     : musicLibraryRows(state.library, savedRows().map(row => row.track)));
 
   return {
@@ -207,7 +207,7 @@ export const ownedTrackForItem = (item: CatalogItem): Track | null =>
 export const isSavedKeys = (keys: string[]): boolean =>
   !!ownedTrackForKeys(keys) || savedEntryForKeys(keys) !== null;
 
-export const isSavedTrack = (track: Track): boolean => isSavedKeys(trackKeys(track));
+export const isSavedTrack = (track: Track): boolean => track.in_library !== false && isSavedKeys(trackKeys(track));
 export const isSavedItem = (item: CatalogItem): boolean => isSavedKeys(catalogItemKeys(item));
 export const isSavedResult = (result: SearchResult): boolean =>
   isSavedKeys(searchResultKeys(result));

@@ -206,6 +206,7 @@ class LibraryStore:
         expected_revision: Optional[int] = None,
         operation_id: Optional[str] = None,
         playlist_entry=None,
+        collection_membership: Optional[tuple[str, bool]] = None,
     ) -> int:
         """Atomically replace the canonical library and return its revision.
 
@@ -258,9 +259,11 @@ class LibraryStore:
                     """,
                     aliases.items(),
                 )
-                from shared.collection import sync as sync_collection, admit, entries, save_entries
+                from shared.collection import sync as sync_collection, admit, entries, save_entries, set_membership
                 metadata.remap_track_ids(aliases, references=False)
                 sync_collection(conn, metadata, self.db_path, id_replacements)
+                if collection_membership is not None:
+                    set_membership(conn, *collection_membership)
                 if playlist_entry is not None:
                     name, entry = playlist_entry
                     if name not in metadata.playlists:

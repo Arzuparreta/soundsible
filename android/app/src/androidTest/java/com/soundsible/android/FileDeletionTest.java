@@ -74,8 +74,11 @@ public class FileDeletionTest {
         assertEquals(web.evaluate(scenario, "window.__deletionError"), "true", web.evaluate(scenario, "window.__deletionDone"));
     }
     private void remove(ActivityScenario<MainActivity> scenario, String id) throws Exception {
-        menu(scenario, id); click(scenario, "Delete from library");
-        waitFor(scenario, "!!document.querySelector('[role=dialog]')"); click(scenario, "Delete");
+        remove(scenario, id, "Delete from library", "Delete");
+    }
+    private void remove(ActivityScenario<MainActivity> scenario, String id, String action, String confirmation) throws Exception {
+        menu(scenario, id); click(scenario, action);
+        waitFor(scenario, "!!document.querySelector('[role=dialog]')"); click(scenario, confirmation);
         waitFor(scenario, "!document.querySelector('[data-browse-track-id=" + JSONObject.quote(id) + "]')");
     }
     private void cleanup(EngineConnection connection, String origin, String cookie) throws Exception {
@@ -144,7 +147,7 @@ public class FileDeletionTest {
             menu(scenario, id); click(scenario, "Delete from library"); click(scenario, "Cancel");
             assertNotNull(acquired(connection, origin, member, "B1111111111"));
             assertNotNull(store.local(id, epoch)); assertEquals(keys, web.evaluate(scenario, "JSON.stringify(window.__deletionState.items.map(i=>i.key))"));
-            remove(scenario, id);
+            remove(scenario, id, "Remove download", "Remove download");
             waitFor(scenario, "window.__deletionState.items.length===2 && window.__deletionState.items[0].source==='preview' && !window.__deletionState.playWhenReady && Math.abs(window.__deletionState.positionMs-20000)<1000");
             until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
             while (store.state(epoch).getJSONArray("items").length() > 0) { assertTrue("Copy removal must finish", System.nanoTime() < until); Thread.sleep(100); }

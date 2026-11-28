@@ -43,7 +43,7 @@ export function TvLibrary(props: TvLibraryProps) {
   const focus = useTvFocus();
   const [loadingMoreAlbums, setLoadingMoreAlbums] = createSignal(false);
 
-  const trackIndex = createMemo(() => buildTrackIndex(musicLibrary(), state.library));
+  const trackIndex = createMemo(() => buildTrackIndex(state.collectionItems ?? musicLibrary(), state.library));
   const savedPlaylists = createMemo(() =>
     playlistNames(state.playlists, state.librarySettings.playlist_order),
   );

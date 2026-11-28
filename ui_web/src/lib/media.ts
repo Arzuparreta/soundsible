@@ -139,10 +139,9 @@ interface TrackCoverIdentity {
  * A song you saved but never downloaded is not a library track: it has no row
  * the engine knows about, so `/api/static/cover/<its id>` is a question about
  * something that has never existed and the answer is a placeholder at best.
- * Its one image is the thumbnail captured in the saved snapshot (see
- * `lib/saved.ts`), and that is the only artwork it will ever have until a
- * download gives it a file. A library track is the other way round: the engine
- * always has an answer, its embedded art or the shipped placeholder.
+ * Its artwork comes from the collection snapshot or the online source's
+ * thumbnail. For a downloaded file the engine serves its artwork or the
+ * shipped placeholder.
  *
  * This fork used to be written out at every call site — grids, rows, pickers —
  * and the playlist surfaces were simply the ones that never got the copy, so a

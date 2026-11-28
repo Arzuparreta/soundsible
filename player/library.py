@@ -282,6 +282,7 @@ class LibraryManager:
         id_replacements: Optional[Dict[str, str]] = None,
         operation_id=None,
         playlist_entry=None,
+        collection_membership=None,
         expected_revision: Optional[int] = None,
     ) -> bool:
         """
@@ -308,6 +309,7 @@ class LibraryManager:
                     expected_revision=self._library_revision if expected_revision is None else expected_revision,
                     **({"operation_id": operation_id} if operation_id else {}),
                     **({"playlist_entry": playlist_entry} if playlist_entry is not None else {}),
+                    **({"collection_membership": collection_membership} if collection_membership is not None else {}),
                 )
                 # Acquisitions stage a detached model. Publish it only after
                 # its sources and item identities have committed together.
@@ -768,6 +770,51 @@ class LibraryManager:
             return self.metadata.tracks if (self.metadata and not query) else []
 
     @serialized
+    def remove_collection_item(self, item_id: str, *, keep_saved: bool) -> list[str] | None:
+        """Remove every acquired file for an item, with explicit membership intent."""
+        from shared.collection import Collection
+        from shared.library_dates import now
+        from shared.library_lifecycle import LibraryPersistenceError
+        self.refresh_if_stale()
+        target = Collection(self.db).removal_target(item_id)
+        if target is None:
+            return None
+        file_ids, saved, can_stream = target
+        if not file_ids and (keep_saved or not saved):
+            return []
+        if keep_saved and not can_stream:
+            raise ValueError('This song has no online playback source')
+        if self.metadata is None:
+            raise LibraryPersistenceError('library_storage_unavailable')
+        tracks = [track for track in self.metadata.tracks if track.id in file_ids]
+        if {track.id for track in tracks} != file_ids:
+            raise LibraryPersistenceError('library_conflict')
+        if keep_saved and any(track.local_path for track in tracks):
+            raise ValueError('This song uses an imported file')
+        try:
+            for track in tracks:
+                retire(track, self.provider)
+        except Exception as exc:
+            raise LibraryPersistenceError('library_storage_unavailable') from exc
+        candidate = replace(self.metadata, tracks=[track for track in self.metadata.tracks if track.id not in file_ids],
+                            playlists=self.metadata.playlists.copy(), settings=deepcopy(self.metadata.settings),
+                            version=self.metadata.version + 1, last_updated=now())
+        if not self._save_metadata(metadata=candidate, collection_membership=(item_id, keep_saved)):
+            raise LibraryPersistenceError(self.last_save_error)
+        self._cleanup_retired(tracks)
+        return [track.id for track in tracks]
+
+    def _cleanup_retired(self, tracks):
+        for track in tracks:
+            try:
+                if self.cache:
+                    self.cache.remove_track(track.id)
+            except Exception as exc:
+                self._log(f"Library deletion committed; cache cleanup deferred: {exc}")
+        if tracks:
+            drain(self.provider)
+
+    @serialized
     def delete_track(self, track: Track) -> bool:
         """
         Permanently delete a track from:
@@ -790,12 +837,7 @@ class LibraryManager:
             candidate.version += 1
             if not self._save_metadata(metadata=candidate):
                 return False
-            try:
-                if self.cache:
-                    self.cache.remove_track(track.id)
-            except Exception as exc:
-                self._log(f"Library deletion committed; cache cleanup deferred: {exc}")
-            drain(self.provider)
+            self._cleanup_retired([track])
             return True
         except Exception as exc:
             self._log(f"Error deleting track: {exc}")

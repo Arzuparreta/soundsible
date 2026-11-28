@@ -31,7 +31,7 @@ import { openNativeDjPlacement } from './DjPlacement';
 import { openNativeLyrics } from './Lyrics';
 import { openNativeMetadataEditor } from './metadataEditor';
 import { nativePlaylistActions, nativePlaylistOccurrenceActions, createNativePlaylist } from './playlistActions';
-import { buildSavedIdentityIndex, savedEntryInIndex } from '../lib/saved';
+import { buildSavedIdentityIndex, savedEntryInIndex, savedFromTrack } from '../lib/saved';
 import type { SavedEntry, Track } from '../types/music';
 import { registerArtworkMetadata } from '../lib/media';
 import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
@@ -571,7 +571,17 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
                 if (current()) openNativeMetadataEditor(track, current, sync, id => snapshot()?.tracks.find(row => row.id === id), saved => runtime.execute({ action: 'metadata', tracks: [{ id: saved.id, title: saved.title, artist: saved.artist, album: saved.album ?? '', album_artist: saved.album_artist ?? null, album_id: saved.album_id ?? null, artist_id: saved.artist_id ?? null }] }));
               } }] : []),
               ...(context ? nativePlaylistOccurrenceActions(context.playlist, context.index, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []),
-              ...(track.source !== 'preview' && !isPodcastTrack(track) ? [nativeFileDeletionAction(track, fileDeletion, current)] : []),
+              ...(track.in_library === false ? [{ label: t('collection.save'), disabled: !current(), onSelect: () => {
+                if (current()) void request('/api/library/saved/set', { method: 'POST', signal: controller.signal,
+                  body: { entries: [savedFromTrack(track)], saved: true } })
+                  .then(() => { if (current()) return sync(); })
+                  .catch(() => { if (current()) setError(t('common.loadFailed')); });
+              } }] : []),
+              ...(!inRoute && track.source !== 'preview' && track.can_remove_download && !isPodcastTrack(track)
+                ? [nativeFileDeletionAction(track, fileDeletion, current, true)] : []),
+              ...(!inRoute && !isPodcastTrack(track) && (track.source !== 'preview'
+                || (track.item_id && savedEntries().some(entry => entry.item_id === track.item_id)))
+                ? [nativeFileDeletionAction(track, fileDeletion, current)] : []),
               ...offlineActions([track], offlineState, offlineCommand, () => generation)] }, event);
   }
   registerNativeBack(() => {

@@ -165,6 +165,7 @@ export interface PlayerActions {
   startRadio: (seed: Track) => Promise<void>;
   stopRadio: () => void;
   deleteTrack: (id: string) => Promise<void>;
+  removeCollectionTrack: (track: Track, keepSaved: boolean) => Promise<void>;
   updateTrackMetadata: (id: string, meta: {
     title?: string;
     artist?: string;

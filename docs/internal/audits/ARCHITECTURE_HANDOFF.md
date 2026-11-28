@@ -22,6 +22,7 @@ The checks were made on `main` at `3c7e4af3`. Those marked as
 | 7 | yt-dlp update with the module already imported | **Closed**: the daemon upgrades before importing the API |
 | 8 | Dead code and minor details | **Closed** |
 | 9 | Musical identity coupled to hash/video and rebuilt in each client | **Closed** in PR #423 (merged 2026-11-06) |
+| 9a | Removing a downloaded song could leave its saved row in Songs | **Closed** by the [collection removal contract](COLLECTION_IDENTITY.md#removing-a-song-or-its-download) |
 
 ## Closed in the first PR
 

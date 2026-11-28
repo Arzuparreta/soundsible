@@ -399,6 +399,22 @@ def delete_track_from_library(track_id):
     raise LibraryPersistenceError(getattr(lib, "last_save_error", None))
 
 
+@library_bp.route("/api/library/collection/<item_id>", methods=["DELETE"], defaults={"keep_saved": False})
+@library_bp.route("/api/library/collection/<item_id>/download", methods=["DELETE"], defaults={"keep_saved": True})
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_delete_item", limit=30, window_sec=60)
+def delete_collection_item(item_id, keep_saved):
+    api = _get_api()
+    try:
+        retired = api["get_library"]().remove_collection_item(item_id, keep_saved=keep_saved)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 409
+    if retired is None:
+        return jsonify(error="Song not found"), 404
+    api["emit_to_user"]("library_updated")
+    return jsonify(status="success", retired_file_ids=retired)
+
+
 @library_bp.route("/api/library/wipe", methods=["POST"])
 @require_scope(SCOPE_ADMIN_DANGEROUS, allow_trusted_network=True)
 @rate_limit("library_wipe", limit=3, window_sec=300)

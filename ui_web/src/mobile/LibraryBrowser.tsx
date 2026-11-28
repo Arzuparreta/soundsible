@@ -39,6 +39,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
   const localCollections = (kind: 'albums' | 'artists') => {
     const groups = new Map<string, { id: string; title: string; ids: string[]; artist: string }>();
     for (const track of library().tracks) {
+      if (track.in_library === false) continue;
       const title = kind === 'albums' ? track.album || t('libraryView.noAlbum') : track.artist;
       const id = (kind === 'albums' ? track.album_id : track.artist_id) || `${kind}:${kind === 'albums' ? track.album_artist || track.artist : ''}:${title}`;
       const group = groups.get(id) ?? { id, title, ids: [], artist: track.album_artist || track.artist };
@@ -60,7 +61,8 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
     registerArtworkMetadata(library().tracks);
     const ids = collection()?.ids;
     const byId = collectionIndex(library().tracks);
-    const rows = ids ? ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []) : library().tracks;
+    const rows = ids ? ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : [])
+      : library().tracks.filter(track => track.in_library !== false);
     return rows;
   });
   const sourceTracks = createMemo(() => {

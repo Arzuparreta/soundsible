@@ -28,6 +28,31 @@ keep using the file catalog for editing, bytes and downloads, but it does not
 rebuild the collection by matching files and favourites. Collection
 references are indexed by `item_id`; audio uses its source descriptor.
 
+## Removing a song or its download
+
+The song menu sends the exact account `item_id` back to the engine. **Delete
+from library** clears the saved and favourite flags and detaches the song's
+files in one library transaction. Playlist occurrences keep their order and
+identity. The snapshot marks a playlist-only row with `in_library: false` so
+playlists can resolve it while Songs and library search exclude it. A row
+with no surviving playback source stays visible in its playlist as unavailable.
+
+**Remove download** detaches the files and keeps the same song saved. It is
+offered for managed music with a known online playback source. The streamed
+row uses its stored thumbnail or the thumbnail for that exact video. Shared
+audio cleanup runs after the SQLite commit and waits for the last account
+reference. Imported originals stay on disk and can be picked up by another
+folder scan. The file-ID DELETE route still provides its original source-only
+semantics for older callers. Android confirms a file left the account before
+retiring native playback and offline copies of that file.
+
+Admission still requires exact, unambiguous evidence. Similar titles and
+durations never trigger a merge or a source picker. A removed song can be
+saved again under the same identity, giving its existing playlist positions
+and listening history a playable source again.
+
+## Acquiring music
+
 Adding from search/DJ sends a musical descriptor to the playlist operation.
 Admission, saving and membership are confirmed in a single transaction. Acquisition builds a
 separate snapshot and only publishes it in memory after confirming sources and
