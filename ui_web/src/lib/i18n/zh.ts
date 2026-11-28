@@ -185,6 +185,8 @@ export const zh: Dict = {
     },
   },
   common: {
+    updatedPage: 'Soundsible 已更新。请重新加载以打开此页面。',
+    reload: '重新加载',
     clearSearch: '清除搜索',
     loadFailed: '加载失败，请重试。',
     play: '播放',

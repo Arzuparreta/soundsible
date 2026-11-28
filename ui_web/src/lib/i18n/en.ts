@@ -185,6 +185,8 @@ export const en = {
     },
   },
   common: {
+    updatedPage: 'Soundsible has updated. Reload to open this page.',
+    reload: 'Reload',
     clearSearch: 'Clear search',
     loadFailed: 'Could not load. Please try again.',
     play: 'Play',

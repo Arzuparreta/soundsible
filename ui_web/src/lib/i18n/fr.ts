@@ -185,6 +185,8 @@ export const fr: Dict = {
     },
   },
   common: {
+    updatedPage: 'Soundsible a été mis à jour. Rechargez pour ouvrir cette page.',
+    reload: 'Recharger',
     clearSearch: 'Effacer la recherche',
     loadFailed: 'Impossible de charger. Veuillez réessayer.',
     play: 'Lire',
