@@ -20,7 +20,7 @@ import {
 } from '../stores';
 import { player } from '../stores/player';
 import { coverUrl } from '../lib/media';
-import { catalogItemKeys } from '../lib/playbackIdentity';
+import { catalogSaveRequest } from '../lib/catalogDownload';
 import { artistPath, albumPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
@@ -637,15 +637,7 @@ export default function Search() {
     setSaving((s) => new Set(s).add(item.id));
     try {
       const response = await api.saveCatalogItem({
-        catalog_item_id: item.id,
-        source: item.source,
-        artist,
-        title: item.title,
-        duration: item.duration,
-        cover: item.cover,
-        external_ids: item.external_ids,
-        identity_keys: catalogItemKeys(item),
-        ...catalogReleaseEvidence(item),
+        ...catalogSaveRequest(item, artist, catalogReleaseEvidence(item)),
         confirm_video_id:
           confirmVideoId ||
           (item.external_ids?.youtube_id ? String(item.external_ids.youtube_id) : undefined),

@@ -2,11 +2,11 @@ import type { MenuEvent } from '../lib/menuEvent';
 import { createEffect, createSignal, on, Show } from 'solid-js';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
-import type { createIncomingTrack } from './incoming';
+import type { createIncomingLinks } from './incoming';
 import styles from './AndroidStart.module.css';
 
 /** Arrival never replaces audio; an explicit action is required on the active account. */
-export default function IncomingSong(props: { incoming: ReturnType<typeof createIncomingTrack>; track: () => Track | null;
+export default function IncomingSong(props: { incoming: ReturnType<typeof createIncomingLinks>['song']; track: () => Track | null;
   disabled: boolean; onPlay: (track: Track) => Promise<void>; onMenu: (track: Track, event?: MenuEvent) => void }) {
   const [busy, setBusy] = createSignal(false);
   const [failed, setFailed] = createSignal(false);

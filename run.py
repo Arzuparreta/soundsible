@@ -255,11 +255,8 @@ from pathlib import Path
 from shared.constants import STATION_PORT
 from shared.runtime import (
     RuntimeConfig,
-    configure_runtime,
-    ensure_runtime_directories,
     get_config_dir,
-    migrate_legacy_app_dirs,
-    runtime_with_overrides,
+    prepare_runtime,
 )
 
 PLAYER_URL = f"http://localhost:{STATION_PORT}/player/"
@@ -309,27 +306,10 @@ def _build_runtime_config(args: argparse.Namespace, *, desktop_defaults: bool) -
         advanced_mode = False
     elif not args.advanced_mode and "SOUNDSIBLE_ADVANCED_MODE" not in os.environ:
         advanced_mode = True
-    runtime = runtime_with_overrides(
-        base=base,
-        host=host,
-        port=port,
-        config_dir=args.config_dir,
-        data_dir=args.data_dir,
-        cache_dir=args.cache_dir,
-        log_dir=args.log_dir,
-        music_dir=args.music_dir,
-        ui_dist=args.ui_dist,
-        owner_token_file=args.owner_token_file,
-        lan_enabled=args.lan_enabled,
-        advanced_mode=advanced_mode,
+    return prepare_runtime(
+        args, base=base, host=host, port=port,
+        lan_enabled=args.lan_enabled, advanced_mode=advanced_mode,
     )
-    if runtime.port == 0:
-        bind_host, bind_port = runtime.resolved_bind()
-        runtime = runtime_with_overrides(base=runtime, host=bind_host, port=bind_port)
-    configure_runtime(runtime)
-    migrate_legacy_app_dirs(runtime)
-    ensure_runtime_directories(runtime)
-    return runtime
 
 
 def _is_port_in_use(port: int) -> bool:

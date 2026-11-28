@@ -3,7 +3,6 @@ import type { MenuAction } from '../components/ActionMenu';
 import NativeSettings from './Settings';
 import NativeInvite from './Invite';
 import { nativeInviteLink } from './inviteLink';
-import { createIncomingInvite } from './incomingInvite';
 import { canPlayOnDevice, nativeMusicLinkActions, openNativePlayOnDevice } from './songActions';
 import { trackMusic } from '../lib/musicLinks';
 import { nativeDevices, type NativeDeviceState } from './devices';
@@ -39,7 +38,7 @@ import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
 import type { User } from '../lib/session';
 import { nativeCopy } from './clipboard';
 import { nativeShareTrack } from './share';
-import { createIncomingTrack } from './incoming';
+import { createIncomingLinks } from './incoming';
 import IncomingSong from './IncomingSong';
 import { engine, useEngine, watchEngine } from './engine';
 import { dispatchDiscoveryFeedReady } from '../lib/discoveryEvents';
@@ -164,8 +163,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   const [downloadsFailed, setDownloadsFailed] = createSignal(false);
   const [bookmarksLoading, setBookmarksLoading] = createSignal(false);
   const [bookmarksFailed, setBookmarksFailed] = createSignal(false);
-  const incoming = createIncomingTrack();
-  const incomingInvite = createIncomingInvite();
+  const { song: incoming, invitation: incomingInvite } = createIncomingLinks();
   const incomingSong = (): Track | null => {
     const capsule = incoming.selection()?.capsule;
     if (!capsule) return null;

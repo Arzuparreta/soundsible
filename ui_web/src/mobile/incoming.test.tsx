@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { encodeTrackCapsule } from '../lib/trackShare';
 const mocks = vi.hoisted(() => ({ incoming: vi.fn(), dismiss: vi.fn(), addListener: vi.fn(), remove: vi.fn(), listener: undefined as undefined | ((value: { token: string; url: string }) => void) }));
 vi.mock('./share', () => ({ nativeShare: mocks }));
-import { createIncomingTrack } from './incoming';
+import { createIncomingLinks } from './incoming';
 const link = (token: string, title: string) => ({ token, url: 'soundsible://open?shared=' + encodeTrackCapsule({ v: 1, kind: 'music', yt: 'dQw4w9WgXcQ', title, artist: 'Artist' }) });
 beforeEach(() => {
   cleanup(); vi.resetAllMocks(); mocks.listener = undefined;
@@ -11,8 +11,8 @@ beforeEach(() => {
   mocks.incoming.mockResolvedValue({ incoming: null }); mocks.dismiss.mockResolvedValue({ dismissed: true }); mocks.remove.mockResolvedValue(undefined);
 });
 function mount() {
-  let controller!: ReturnType<typeof createIncomingTrack>;
-  const view = render(() => { controller = createIncomingTrack(); return <p>{controller.selection()?.capsule.title ?? ''}</p>; });
+  let controller!: ReturnType<typeof createIncomingLinks>['song'];
+  const view = render(() => { controller = createIncomingLinks().song; return <p>{controller.selection()?.capsule.title ?? ''}</p>; });
   return { view, controller };
 }
 it('restores a pending cold link and consumes only after explicit dismissal', async () => {

@@ -17,7 +17,6 @@
     "core:event:allow-listen",
     "dialog:default",
     "opener:default",
-    "shell:default",
     "global-shortcut:default",
     "autostart:allow-enable",
     "autostart:allow-disable",
