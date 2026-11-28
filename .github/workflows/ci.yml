@@ -615,6 +615,8 @@ jobs:
   # separate job so service outages never force a rebuild or move image tags.
   attest_image:
     needs: publish
+    # The publisher can succeed after an upstream Docker check is skipped.
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
